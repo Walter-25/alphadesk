@@ -1,5 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { supabase } from './lib/supabase'
+import LoginPage from './components/LoginPage'
+import AdminPanel from './components/AdminPanel'
 
 // ─── TIPI ────────────────────────────────────────────────────────────────────
 interface Index { name: string; ticker: string; value: string; chg: string; pct: string; region: 'asia'|'europe'|'us' }
@@ -405,8 +408,102 @@ function PageRevisione() {
 }
 
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
+
+function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogout }: {
+  active: string; setActive: (s: string) => void; displayName: string; initials: string; isAdmin: boolean; onLogout: () => void
+}) {
+  const nav = [
+    { id: 'dashboard', label: 'Dashboard', icon: '◈' },
+    { id: 'analisi', label: 'Analisi Mercati', icon: '◉' },
+    { id: 'playbook', label: 'Playbook', icon: '◎' },
+    { id: 'revisione', label: 'Revisione', icon: '◐' },
+    { id: 'sistemi', label: 'Sistemi Auto', icon: '◑' },
+    { id: 'journal', label: 'Journal', icon: '◒' },
+  ]
+  return (
+    <aside style={{ width: 220, background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 100 }}>
+      <div style={{ padding: '28px 24px 20px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 20, letterSpacing: '-0.02em', color: 'var(--text-0)' }}>
+          Alpha<span style={{ color: 'var(--accent)' }}>Desk</span>
+        </div>
+        <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace", marginTop: 3, letterSpacing: '0.08em' }}>ANALYSIS · REVIEW · EDGE</div>
+      </div>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent) 0%, var(--blue) 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: '#000', flexShrink: 0 }}>{initials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-0)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</div>
+          <div style={{ fontSize: 11, color: 'var(--text-2)' }}>{isAdmin ? 'Admin' : 'Trader'}</div>
+        </div>
+      </div>
+      <nav style={{ padding: '12px 10px', flex: 1 }}>
+        {nav.map(item => (
+          <button key={item.id} onClick={() => setActive(item.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', borderRadius: 8, border: 'none', background: active === item.id ? 'var(--accent-dim)' : 'transparent', color: active === item.id ? 'var(--accent)' : 'var(--text-1)', cursor: 'pointer', fontSize: 13, fontWeight: active === item.id ? 500 : 400, marginBottom: 2, textAlign: 'left', borderLeft: active === item.id ? '2px solid var(--accent)' : '2px solid transparent', transition: 'all 0.15s' }}>
+            <span style={{ fontSize: 16 }}>{item.icon}</span>{item.label}
+          </button>
+        ))}
+        {isAdmin && (
+          <button onClick={() => setActive('admin')} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 14px', borderRadius: 8, border: 'none', background: active === 'admin' ? 'rgba(245,166,35,0.1)' : 'transparent', color: active === 'admin' ? 'var(--amber)' : 'var(--text-2)', cursor: 'pointer', fontSize: 13, marginBottom: 2, textAlign: 'left', borderLeft: active === 'admin' ? '2px solid var(--amber)' : '2px solid transparent', transition: 'all 0.15s', marginTop: 8 }}>
+            <span style={{ fontSize: 16 }}>⚙</span>Utenti
+          </button>
+        )}
+      </nav>
+      <div style={{ padding: '14px 10px', borderTop: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-2)', fontFamily: "'DM Mono', monospace", marginBottom: 10, paddingLeft: 4 }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }}></span>
+          LIVE — {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
+        </div>
+        <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, transition: 'all 0.15s' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--red)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,77,109,0.3)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-2)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)' }}>
+          ⏻ Esci
+        </button>
+      </div>
+    </aside>
+  )
+}
+
 export default function App() {
   const [active, setActive] = useState('dashboard')
+  const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setUser(session.user)
+        loadProfile(session.user.id)
+      }
+      setAuthLoading(false)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) { setUser(session.user); loadProfile(session.user.id) }
+      else { setUser(null); setProfile(null) }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const loadProfile = async (userId: string) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (data) setProfile(data)
+  }
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    setUser(null); setProfile(null)
+  }
+
+  if (authLoading) return (
+    <div style={{ minHeight: '100vh', background: 'var(--bg-0)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 13, color: 'var(--text-2)', fontFamily: "'DM Mono',monospace" }}>Caricamento...</div>
+    </div>
+  )
+
+  if (!user) return <LoginPage onLogin={(u) => { setUser(u); loadProfile(u.id) }} />
+
+  const displayName = profile?.full_name || user.email?.split('@')[0] || 'Utente'
+  const initials = displayName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0,2)
+  const isAdmin = profile?.role === 'admin'
 
   const pages: Record<string, React.ReactNode> = {
     dashboard: <PageDashboard />,
@@ -415,11 +512,12 @@ export default function App() {
     revisione: <PageRevisione />,
     sistemi: <PageSistemi />,
     journal: <PageDashboard />,
+    admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard />,
   }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar active={active} setActive={setActive} />
+      <AuthSidebar active={active} setActive={setActive} displayName={displayName} initials={initials} isAdmin={isAdmin} onLogout={handleLogout} />
       <main style={{ marginLeft: 220, flex: 1, padding: '32px 36px', minHeight: '100vh', background: 'var(--bg-0)' }}>
         <div style={{ maxWidth: 1280, margin: '0 auto' }}>
           {pages[active]}
