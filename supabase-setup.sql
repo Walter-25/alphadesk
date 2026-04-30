@@ -37,3 +37,36 @@ BEGIN
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ─── TABELLA TRADES (NinjaTrader) ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.trades (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  ninja_id TEXT,
+  account TEXT NOT NULL,
+  strategy TEXT NOT NULL DEFAULT 'Manual',
+  instrument TEXT NOT NULL,
+  direction TEXT NOT NULL CHECK (direction IN ('Long', 'Short')),
+  entry_time TIMESTAMPTZ,
+  exit_time TIMESTAMPTZ,
+  duration_min INTEGER DEFAULT 0,
+  entry_price NUMERIC(12,4) DEFAULT 0,
+  exit_price NUMERIC(12,4) DEFAULT 0,
+  quantity INTEGER DEFAULT 1,
+  pnl NUMERIC(12,2) DEFAULT 0,
+  commission NUMERIC(12,2) DEFAULT 0,
+  net_pnl NUMERIC(12,2) DEFAULT 0,
+  mae NUMERIC(12,2),
+  mfe NUMERIC(12,2),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(ninja_id, user_id)
+);
+
+ALTER TABLE public.trades ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users see own trades" ON public.trades
+  FOR ALL USING (auth.uid() = user_id);
+
+CREATE POLICY "Service role trades" ON public.trades
+  FOR ALL USING (true);
