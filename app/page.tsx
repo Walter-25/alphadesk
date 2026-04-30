@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
+import LiveChart from './components/LiveChart'
+import TradesPage from './components/TradesPage'
 import { supabase } from './lib/supabase'
 import LoginPage from './components/LoginPage'
 import AdminPanel from './components/AdminPanel'
@@ -66,8 +68,9 @@ function Sidebar({ active, setActive }: { active: string; setActive: (s: string)
     { id: 'analisi', label: 'Analisi Mercati', icon: '◉' },
     { id: 'playbook', label: 'Playbook', icon: '◎' },
     { id: 'revisione', label: 'Revisione', icon: '◐' },
-    { id: 'sistemi', label: 'Sistemi Auto', icon: '◑' },
-    { id: 'journal', label: 'Journal', icon: '◒' },
+    { id: 'eseguiti', label: 'Eseguiti', icon: '◑' },
+    { id: 'sistemi', label: 'Sistemi Auto', icon: '◒' },
+    { id: 'journal', label: 'Journal', icon: '○' },
   ]
   return (
     <aside style={{ width: 220, background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 100 }}>
@@ -273,91 +276,109 @@ function PageDashboard() {
 }
 
 function PageAnalisi() {
+  const [quotes, setQuotes] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [lastUpdate, setLastUpdate] = useState('')
   const [regionFilter, setRegionFilter] = useState<'all'|'asia'|'europe'|'us'>('all')
-  const filtered = regionFilter === 'all' ? INDICES : INDICES.filter(i => i.region === regionFilter)
+
+  useEffect(() => {
+    fetchQuotes()
+    const interval = setInterval(fetchQuotes, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  const fetchQuotes = async () => {
+    try {
+      const res = await fetch('/api/market-data')
+      const data = await res.json()
+      if (data.quotes) setQuotes(data.quotes)
+      setLastUpdate(new Date().toLocaleTimeString('it-IT'))
+    } catch {}
+    setLoading(false)
+  }
+
+  const getQ = (sym: string) => quotes.find(q => q.symbol === sym)
+  const fmt = (v: number, d = 2) => v ? v.toFixed(d) : '—'
+  const pctCol = (v: number) => v >= 0 ? 'var(--green)' : 'var(--red)'
+
+  const indexMap = [
+    { sym: '^N225', name: 'Nikkei 225', ticker: 'NKY', region: 'asia' },
+    { sym: '^HSI', name: 'Hang Seng', ticker: 'HSI', region: 'asia' },
+    { sym: '^STOXX50E', name: 'Euro Stoxx 50', ticker: 'SX5E', region: 'europe' },
+    { sym: '^GDAXI', name: 'DAX', ticker: 'DAX', region: 'europe' },
+    { sym: '^FTSE', name: 'FTSE 100', ticker: 'UKX', region: 'europe' },
+    { sym: '^FCHI', name: 'CAC 40', ticker: 'CAC', region: 'europe' },
+    { sym: '^GSPC', name: 'S&P 500', ticker: 'SPX', region: 'us' },
+    { sym: '^NDX', name: 'Nasdaq 100', ticker: 'NDX', region: 'us' },
+    { sym: '^DJI', name: 'Dow Jones', ticker: 'INDU', region: 'us' },
+    { sym: '^RUT', name: 'Russell 2000', ticker: 'RUT', region: 'us' },
+  ]
+  const filtered = regionFilter === 'all' ? indexMap : indexMap.filter(i => i.region === regionFilter)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26, letterSpacing: '-0.02em' }}>Analisi Mercati</div>
-
-      {/* VIX row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>VIX — Fear Index</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <VixGauge value={17.8} label="" />
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-1)', lineHeight: 1.8 }}>
-                <div>Prev close: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)' }}>19.2</span></div>
-                <div>Var: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>-7.3%</span></div>
-                <div>52w High: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)' }}>38.4</span></div>
-                <div>52w Low: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)' }}>12.1</span></div>
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 10, padding: '8px 10px', background: 'var(--bg-3)', borderRadius: 6, fontSize: 11, color: 'var(--green)' }}>
-            ↓ Volatilità in calo — condizioni favorevoli ai livelli tecnici
-          </div>
-        </div>
-
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>VVIX — Volatility of VIX</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <VixGauge value={92.4} label="" />
-            <div>
-              <div style={{ fontSize: 11, color: 'var(--text-1)', lineHeight: 1.8 }}>
-                <div>Prev close: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)' }}>98.1</span></div>
-                <div>Var: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--green)' }}>-5.8%</span></div>
-                <div>Soglia: <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--amber)' }}>&gt;100 allerta</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Calendario economico</div>
-          {NEWS_EVENTS.map((e, i) => <NewsRow key={i} ev={e} />)}
-          <div style={{ marginTop: 10 }}>
-            <a href="https://www.investing.com/economic-calendar/" target="_blank" rel="noopener" style={{ fontSize: 11, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>→ Calendario completo su Investing.com</a>
-          </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26, letterSpacing: '-0.02em' }}>Analisi Mercati</div>
+        <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
+          {loading ? 'Caricamento...' : `Aggiornato: ${lastUpdate}`}
+          <button onClick={fetchQuotes} style={{ marginLeft: 8, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 11 }}>↻</button>
         </div>
       </div>
 
-      {/* Indici globali */}
+      {/* VIX / VVIX / VIX9D — grafici con analisi */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+        <LiveChart symbol="^VIX" label="VIX — Fear Index" color="#ff4d6d" />
+        <LiveChart symbol="^VIX9D" label="VIX9D — Short Term" color="#f5a623" />
+        <LiveChart symbol="SPY" label="SPY — S&P 500 ETF" color="#00d4aa" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <LiveChart symbol="QQQ" label="QQQ — Nasdaq ETF" color="#4da6ff" />
+        <LiveChart symbol="^GSPC" label="S&P 500 — Index" color="#00d4aa" />
+      </div>
+
+      {/* Indici globali live */}
       <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' }}>Indici globali</div>
+          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' }}>Indici globali — live</div>
           <div style={{ display: 'flex', gap: 6 }}>
             {(['all','asia','europe','us'] as const).map(r => (
               <button key={r} onClick={() => setRegionFilter(r)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: regionFilter === r ? 'var(--accent-dim)' : 'transparent', color: regionFilter === r ? 'var(--accent)' : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>{r}</button>
             ))}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          {filtered.map(idx => <IndexCard key={idx.ticker} idx={idx} />)}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          {filtered.map(idx => {
+            const q = getQ(idx.sym)
+            const pct = q?.regularMarketChangePercent || 0
+            const price = q?.regularMarketPrice || 0
+            const chg = q?.regularMarketChange || 0
+            return (
+              <div key={idx.sym} style={{ background: 'var(--bg-3)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', marginBottom: 2 }}>{idx.ticker}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-1)', marginBottom: 6 }}>{idx.name}</div>
+                <div style={{ fontSize: 17, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-0)' }}>{loading ? '—' : price.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</div>
+                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: pctCol(pct) }}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
+                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: pctCol(chg) }}>{chg >= 0 ? '+' : ''}{chg.toFixed(0)}</span>
+                </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      {/* Settori */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>Performance settori S&P 500 — oggi</div>
-          {SECTORS.map(s => <SectorBar key={s.name} s={s} />)}
-        </div>
-
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>Grafici — TradingView embedded</div>
-          <div style={{ background: 'var(--bg-3)', borderRadius: 8, padding: 16, textAlign: 'center', height: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-            <div style={{ fontSize: 32, opacity: 0.3 }}>◎</div>
-            <div style={{ fontSize: 13, color: 'var(--text-1)' }}>Grafico TradingView</div>
-            <div style={{ fontSize: 11, color: 'var(--text-2)', maxWidth: 260, textAlign: 'center', lineHeight: 1.6 }}>Nel sito deployato, qui caricherai i widget TradingView di SPY, QQQ, ES1! con trendline e livelli annotabili direttamente in piattaforma</div>
-            <a href="https://it.tradingview.com/chart/" target="_blank" rel="noopener" style={{ fontSize: 11, color: 'var(--accent)', marginTop: 8 }}>→ Apri TradingView</a>
-          </div>
+      {/* Calendario economico */}
+      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Calendario economico</div>
+        {NEWS_EVENTS.map((e, i) => <NewsRow key={i} ev={e} />)}
+        <div style={{ marginTop: 12 }}>
+          <a href="https://www.investing.com/economic-calendar/" target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>→ Calendario completo su Investing.com ↗</a>
         </div>
       </div>
     </div>
   )
 }
+
 
 function PagePlaybook() {
   return (
@@ -417,8 +438,9 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
     { id: 'analisi', label: 'Analisi Mercati', icon: '◉' },
     { id: 'playbook', label: 'Playbook', icon: '◎' },
     { id: 'revisione', label: 'Revisione', icon: '◐' },
-    { id: 'sistemi', label: 'Sistemi Auto', icon: '◑' },
-    { id: 'journal', label: 'Journal', icon: '◒' },
+    { id: 'eseguiti', label: 'Eseguiti', icon: '◑' },
+    { id: 'sistemi', label: 'Sistemi Auto', icon: '◒' },
+    { id: 'journal', label: 'Journal', icon: '○' },
   ]
   return (
     <aside style={{ width: 220, background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 100 }}>
@@ -511,6 +533,7 @@ export default function App() {
     playbook: <PagePlaybook />,
     revisione: <PageRevisione />,
     sistemi: <PageSistemi />,
+    eseguiti: <TradesPage userId={user.id} />,
     journal: <PageDashboard />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard />,
   }
