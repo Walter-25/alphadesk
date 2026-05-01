@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import LiveChart from './components/LiveChart'
 import TradesPage from './components/TradesPage'
+import TradingViewChart from './components/TradingViewChart'
+import EconomicCalendar from './components/EconomicCalendar'
 import { supabase } from './lib/supabase'
 import LoginPage from './components/LoginPage'
 import AdminPanel from './components/AdminPanel'
@@ -291,14 +293,12 @@ function PageAnalisi() {
     try {
       const res = await fetch('/api/market-data')
       const data = await res.json()
-      if (data.quotes) setQuotes(data.quotes)
-      setLastUpdate(new Date().toLocaleTimeString('it-IT'))
+      if (data.quotes?.length) { setQuotes(data.quotes); setLastUpdate(new Date().toLocaleTimeString('it-IT')) }
     } catch {}
     setLoading(false)
   }
 
   const getQ = (sym: string) => quotes.find(q => q.symbol === sym)
-  const fmt = (v: number, d = 2) => v ? v.toFixed(d) : '—'
   const pctCol = (v: number) => v >= 0 ? 'var(--green)' : 'var(--red)'
 
   const indexMap = [
@@ -308,6 +308,7 @@ function PageAnalisi() {
     { sym: '^GDAXI', name: 'DAX', ticker: 'DAX', region: 'europe' },
     { sym: '^FTSE', name: 'FTSE 100', ticker: 'UKX', region: 'europe' },
     { sym: '^FCHI', name: 'CAC 40', ticker: 'CAC', region: 'europe' },
+    { sym: '^IBEX', name: 'IBEX 35', ticker: 'IBEX', region: 'europe' },
     { sym: '^GSPC', name: 'S&P 500', ticker: 'SPX', region: 'us' },
     { sym: '^NDX', name: 'Nasdaq 100', ticker: 'NDX', region: 'us' },
     { sym: '^DJI', name: 'Dow Jones', ticker: 'INDU', region: 'us' },
@@ -319,60 +320,61 @@ function PageAnalisi() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 26, letterSpacing: '-0.02em' }}>Analisi Mercati</div>
-        <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
-          {loading ? 'Caricamento...' : `Aggiornato: ${lastUpdate}`}
-          <button onClick={fetchQuotes} style={{ marginLeft: 8, padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 11 }}>↻</button>
+        <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          {loading ? 'Caricamento...' : `Indici: ${lastUpdate}`}
+          <button onClick={fetchQuotes} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer', fontSize: 11 }}>↻</button>
         </div>
       </div>
 
-      {/* VIX / VVIX / VIX9D — grafici con analisi */}
+      {/* Grafici TradingView — VIX, VVIX9D, SPY */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
-        <LiveChart symbol="^VIX" label="VIX — Fear Index" color="#ff4d6d" />
-        <LiveChart symbol="^VIX9D" label="VIX9D — Short Term" color="#f5a623" />
-        <LiveChart symbol="SPY" label="SPY — S&P 500 ETF" color="#00d4aa" />
+        <TradingViewChart symbol="CBOE:VIX" label="VIX — Fear Index" interval="D" height={360} />
+        <TradingViewChart symbol="CBOE:VIX9D" label="VIX9D — Short Term Vol" interval="D" height={360} />
+        <TradingViewChart symbol="AMEX:SPY" label="SPY — S&P 500 ETF" interval="D" height={360} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <LiveChart symbol="QQQ" label="QQQ — Nasdaq ETF" color="#4da6ff" />
-        <LiveChart symbol="^GSPC" label="S&P 500 — Index" color="#00d4aa" />
+        <TradingViewChart symbol="NASDAQ:QQQ" label="QQQ — Nasdaq ETF" interval="D" height={380} />
+        <TradingViewChart symbol="CBOE:VVIX" label="VVIX — Vol of VIX" interval="D" height={380} />
       </div>
 
-      {/* Indici globali live */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' }}>Indici globali — live</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {(['all','asia','europe','us'] as const).map(r => (
-              <button key={r} onClick={() => setRegionFilter(r)} style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid var(--border)', background: regionFilter === r ? 'var(--accent-dim)' : 'transparent', color: regionFilter === r ? 'var(--accent)' : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>{r}</button>
-            ))}
+      {/* Indici globali live + Calendario */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' }}>Indici globali — live</div>
+            <div style={{ display: 'flex', gap: 5 }}>
+              {(['all','asia','europe','us'] as const).map(r => (
+                <button key={r} onClick={() => setRegionFilter(r)} style={{ padding: '3px 8px', borderRadius: 5, border: '1px solid var(--border)', background: regionFilter === r ? 'var(--accent-dim)' : 'transparent', color: regionFilter === r ? 'var(--accent)' : 'var(--text-2)', cursor: 'pointer', fontSize: 10, fontFamily: 'var(--font-mono)', textTransform: 'uppercase' }}>{r}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            {filtered.map(idx => {
+              const q = getQ(idx.sym)
+              const pct = q?.regularMarketChangePercent || 0
+              const price = q?.regularMarketPrice || 0
+              const chg = q?.regularMarketChange || 0
+              return (
+                <div key={idx.sym} style={{ background: 'var(--bg-3)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', marginBottom: 2 }}>{idx.ticker}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-1)', marginBottom: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{idx.name}</div>
+                  <div style={{ fontSize: 15, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-0)' }}>{loading ? '—' : price > 0 ? price.toLocaleString('it-IT', { maximumFractionDigits: 0 }) : '—'}</div>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 3 }}>
+                    <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: pctCol(pct) }}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
-          {filtered.map(idx => {
-            const q = getQ(idx.sym)
-            const pct = q?.regularMarketChangePercent || 0
-            const price = q?.regularMarketPrice || 0
-            const chg = q?.regularMarketChange || 0
-            return (
-              <div key={idx.sym} style={{ background: 'var(--bg-3)', borderRadius: 10, padding: '12px 14px', border: '1px solid var(--border)' }}>
-                <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', marginBottom: 2 }}>{idx.ticker}</div>
-                <div style={{ fontSize: 12, color: 'var(--text-1)', marginBottom: 6 }}>{idx.name}</div>
-                <div style={{ fontSize: 17, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-0)' }}>{loading ? '—' : price.toLocaleString('it-IT', { maximumFractionDigits: 0 })}</div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: pctCol(pct) }}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
-                  <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: pctCol(chg) }}>{chg >= 0 ? '+' : ''}{chg.toFixed(0)}</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
+        <EconomicCalendar />
       </div>
 
-      {/* Calendario economico */}
+      {/* Settori */}
       <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Calendario economico</div>
-        {NEWS_EVENTS.map((e, i) => <NewsRow key={i} ev={e} />)}
-        <div style={{ marginTop: 12 }}>
-          <a href="https://www.investing.com/economic-calendar/" target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>→ Calendario completo su Investing.com ↗</a>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 14 }}>Performance settori S&P 500 — oggi</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+          {SECTORS.map(s => <SectorBar key={s.name} s={s} />)}
         </div>
       </div>
     </div>
