@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import LiveChart from './components/LiveChart'
-import TradesPage from './components/TradesPage'
+import TradesAdvanced from './components/TradesAdvanced'
 import TradingViewChart from './components/TradingViewChart'
 import EconomicCalendar from './components/EconomicCalendar'
 import { supabase } from './lib/supabase'
@@ -535,7 +535,7 @@ export default function App() {
     playbook: <PagePlaybook />,
     revisione: <PageRevisione />,
     sistemi: <PageSistemi />,
-    eseguiti: <TradesPage userId={user.id} />,
+    eseguiti: <TradesAdvanced userId={user.id} />,
     journal: <PageDashboard />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard />,
   }
