@@ -28,10 +28,21 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
   const handleSync = async () => {
     if (!selectedAccount) return
     setSyncing(true); setResult(null)
-    const res = await onSync(selectedAccount, selectedBroker, config)
-    setResult(res)
+    try {
+      const res = await onSync(selectedAccount, selectedBroker, config)
+      setResult(res)
+      if (res.newTrades > 0) onReload()
+    } catch(e: any) {
+      setResult({ error: e.message || 'Errore di connessione', newTrades: 0 })
+    }
     setSyncing(false)
-    if (res.newTrades > 0) onReload()
+  }
+
+  const getBrokerHelp = () => {
+    if (selectedBroker === 'ninjatrader') return 'Verifica: NinjaTrader 8 aperto → Tools → Options → Remoting → abilita porta 36973 → riavvia NT8'
+    if (selectedBroker === 'interactive_brokers') return 'Verifica: TWS o IB Gateway aperto → API Settings → porta 4001 abilitata → configura FlexQuery su Account Management'
+    if (selectedBroker === 'tradovate') return 'Genera il token API su app.tradovate.com → Account → API Access'
+    return ''
   }
 
   const getSyncInfo = (account: string) => syncs.find(s => s.account === account)
@@ -119,6 +130,9 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
             )}
           </div>
 
+          <div style={{fontSize:11,color:'var(--text-2)',marginBottom:8,padding:'6px 10px',background:'var(--bg-3)',borderRadius:6}}>
+            ⏰ Sincronizzazione automatica: <strong>22:30</strong> — o manuale in qualsiasi momento
+          </div>
           <button onClick={handleSync} disabled={syncing || !selectedAccount}
             style={{ padding: '10px', background: syncing ? 'var(--bg-4)' : 'var(--accent)', border: 'none', borderRadius: 8, color: syncing ? 'var(--text-2)' : '#000', fontSize: 13, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {syncing ? '⟳ Sincronizzando...' : '⚡ Sincronizza ora'}
@@ -127,10 +141,10 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
           {result && (
             <div style={{ padding: '10px 12px', borderRadius: 8, background: result.error ? 'var(--red-dim)' : result.newTrades > 0 ? 'var(--green-dim)' : 'var(--bg-3)', fontSize: 12, color: result.error ? 'var(--red)' : result.newTrades > 0 ? 'var(--green)' : 'var(--text-2)', lineHeight: 1.6 }}>
               {result.error
-                ? `⚠ ${result.error} — verifica che ${selectedBroker === 'ninjatrader' ? 'NinjaTrader sia aperto e Remoting sia abilitato' : 'le credenziali siano corrette'}`
+                ? <>⚠ {result.error}<br/><span style={{fontSize:10,opacity:0.8}}>{getBrokerHelp()}</span></>
                 : result.newTrades > 0
                   ? `✓ ${result.newTrades} nuovi trade sincronizzati`
-                  : '✓ Nessun trade nuovo dall\'ultima sync'}
+                  : '✓ Nessun trade nuovo dall\'ultima sync — i dati sono aggiornati'}
             </div>
           )}
 

@@ -72,7 +72,18 @@ function TradingKPI({ tradesHook, setActive }: { tradesHook: any; setActive: (s:
     setSelectedAccounts(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
   }
 
-  if (!stats) return null
+  // Se tradesHook è in caricamento
+  if (tradesHook.loading) return (
+    <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:14,padding:'14px 20px',fontSize:12,color:'var(--text-2)'}}>
+      Caricamento dati trading...
+    </div>
+  )
+
+  if (!stats) return (
+    <div style={{background:'var(--bg-2)',border:'1px solid rgba(0,212,170,0.1)',borderRadius:14,padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{fontSize:12,color:'var(--text-2)'}}>◈ Nessun dato trading — <span style={{color:'var(--accent)',cursor:'pointer'}} onClick={()=>setActive('eseguiti')}>Importa i tuoi eseguiti →</span></div>
+    </div>
+  )
 
   return (
     <div style={{ background: 'var(--bg-2)', border: '1px solid rgba(0,212,170,0.15)', borderRadius: 14, padding: '18px 20px' }}>
@@ -126,25 +137,9 @@ function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?
       </div>
 
       {/* Trading KPI da conti reali */}
-      {tradesHook && tradesHook.accounts.length > 0 && <TradingKPI tradesHook={tradesHook} setActive={sa} />}
+      {tradesHook && <TradingKPI tradesHook={tradesHook} setActive={sa} />}
 
-      {/* KPI placeholder se no trades */}
-      {(!tradesHook || tradesHook.accounts.length === 0) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          {[
-            { label: 'P&L settimana', val: '—', sub: 'Carica i tuoi eseguiti', pos: null },
-            { label: 'Win rate (30gg)', val: '—', sub: 'Da NinjaTrader o broker', pos: null },
-            { label: 'Max drawdown', val: '—', sub: 'Vai in Eseguiti per importare', pos: null },
-            { label: 'Trade totali', val: '—', sub: 'Nessun dato', pos: null },
-          ].map(k => (
-            <div key={k.label} style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: '16px 18px' }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 8 }}>{k.label}</div>
-              <div style={{ fontSize: 24, fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-2)' }}>{k.val}</div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 4 }}>{k.sub}</div>
-            </div>
-          ))}
-        </div>
-      )}
+
 
       {/* VIX + indici */}
       <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16 }}>

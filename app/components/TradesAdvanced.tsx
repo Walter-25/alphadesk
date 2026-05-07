@@ -74,36 +74,155 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
   if (lines.length < 2) return []
   const sep = text.includes(';') ? ';' : ','
   const header = lines[0].replace(/\r/,'').split(sep).map(h => h.trim().toLowerCase().replace(/"/g,''))
-  const trades: Trade[] = []
+
+  // Detect formato: Trades vs Executions vs altro
+  const isNTTrades = header.includes('trade number') || header.includes('entry time')
+  const isNTExec = header.includes('action') && header.includes('e/x')
+
+  // Parser numeri formato IT: "25.014,00 $" o "-85,50 $" o "25014,00"
+  const pn = (s: string) => {
+    if (!s) return 0
+    const clean = s.replace(/\./g,'').replace(',','.').replace(/[^0-9.\-]/g,'')
+    return parseFloat(clean) || 0
+  }
+
   const get = (cols: string[], keys: string[]) => {
     for (const k of keys) {
       const idx = header.findIndex(h => h.includes(k))
       if (idx >= 0 && cols[idx]?.trim()) return cols[idx].trim().replace(/"/g,'')
     }; return ''
   }
-  const pn = (s: string) => parseFloat(s.replace(/[^0-9,.-]/g,'').replace(',','.')) || 0
+
+  // Formato NinjaTrader Trades (Trade number;Instrument;Account;Strategy;Market pos.;...)
+  if (isNTTrades) {
+    const trades: Trade[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].replace(/\r/,'').split(sep)
+      if (cols.length < 10) continue
+      const entryStr = get(cols, ['entry time'])
+      const exitStr = get(cols, ['exit time'])
+      const e1 = new Date(entryStr), e2 = new Date(exitStr)
+      // Gestisce formato data italiano: "09/04/2026 16:10:56"
+      const parseDate = (s: string) => {
+        const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/)
+        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`)
+        return new Date(s)
+      }
+      const d1 = parseDate(entryStr), d2 = parseDate(exitStr)
+      const dur = !isNaN(d1.getTime())&&!isNaN(d2.getTime()) ? Math.round((d2.getTime()-d1.getTime())/60000) : 0
+      const dirRaw = get(cols, ['market pos','direction','side']) || 'Long'
+      const pnl = pn(get(cols, ['profit']))
+      const comm = pn(get(cols, ['commission']))
+      const mae = pn(get(cols, ['mae']))
+      const mfe = pn(get(cols, ['mfe']))
+      trades.push({
+        id: `${account}-${i}`,
+        ninja_id: `${account}-NT-${get(cols,['trade number'])||i}`,
+        account,
+        strategy: get(cols, ['strategy']) || 'Manual',
+        instrument: get(cols, ['instrument']) || 'N/A',
+        direction: dirRaw.toLowerCase().includes('short') ? 'Short' : 'Long',
+        entry_time: d1.toISOString(),
+        exit_time: d2.toISOString(),
+        duration_min: dur,
+        entry_price: pn(get(cols, ['entry price'])),
+        exit_price: pn(get(cols, ['exit price'])),
+        quantity: parseInt(get(cols, ['qty'])) || 1,
+        pnl, commission: comm, net_pnl: pnl - comm,
+        mae: mae || undefined,
+        mfe: mfe || undefined,
+        emotion_tags: [], rule_followed: undefined, notes: '',
+      })
+    }
+    return trades
+  }
+
+  // Formato Executions — raggruppa per posizione
+  if (isNTExec) {
+    const entries: any[] = [], exits: any[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].replace(/\r/,'').split(sep)
+      if (cols.length < 7) continue
+      const ex = get(cols, ['e/x'])
+      const parseDate = (s: string) => {
+        const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/)
+        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`)
+        return new Date(s)
+      }
+      const row = {
+        instrument: get(cols, ['instrument']),
+        action: get(cols, ['action']),
+        qty: parseInt(get(cols, ['quantity'])) || 1,
+        price: pn(get(cols, ['price'])),
+        time: parseDate(get(cols, ['time'])),
+        comm: pn(get(cols, ['commission'])),
+        account: get(cols, ['account']) || account,
+        exType: ex,
+      }
+      if (ex.toLowerCase().includes('entry')) entries.push(row)
+      else exits.push(row)
+    }
+    // Abbina entry/exit
+    const trades: Trade[] = []
+    entries.forEach((en, i) => {
+      const ex = exits.find(x => x.instrument === en.instrument && x.time >= en.time) || exits[i]
+      if (!ex) return
+      const dur = ex ? Math.round((ex.time.getTime()-en.time.getTime())/60000) : 0
+      const pnl = ex ? (en.action.toLowerCase()==='sell'
+        ? (en.price-ex.price)*en.qty*2  // MNQ = 2$/tick
+        : (ex.price-en.price)*en.qty*2) : 0
+      trades.push({
+        id: `${account}-ex-${i}`,
+        ninja_id: `${account}-EX-${i}`,
+        account: en.account || account,
+        strategy: 'Manual',
+        instrument: en.instrument || 'N/A',
+        direction: en.action.toLowerCase()=='sell'?'Short':'Long',
+        entry_time: en.time.toISOString(),
+        exit_time: ex?.time.toISOString() || en.time.toISOString(),
+        duration_min: dur,
+        entry_price: en.price, exit_price: ex?.price || 0,
+        quantity: en.qty,
+        pnl: parseFloat(pnl.toFixed(2)),
+        commission: (en.comm||0)+(ex?.comm||0),
+        net_pnl: parseFloat((pnl-(en.comm||0)-(ex?.comm||0)).toFixed(2)),
+        emotion_tags: [], rule_followed: undefined, notes: '',
+      })
+    })
+    return trades
+  }
+
+  // Formato generico fallback
+  const trades: Trade[] = []
   for (let i = 1; i < lines.length; i++) {
     const cols = lines[i].replace(/\r/,'').split(sep)
     if (cols.length < 4) continue
-    const pnl = pn(get(cols,['profit','pnl','p&l','net profit','gain']))
+    const pnl = pn(get(cols,['profit','pnl','p&l','net profit']))
     const comm = pn(get(cols,['commission','comm']))
-    const entryStr = get(cols,['entry time','entrytime','entry_time','time of entry'])
-    const exitStr = get(cols,['exit time','exittime','exit_time','time of exit'])
-    const e1 = new Date(entryStr), e2 = new Date(exitStr)
-    const dur = !isNaN(e1.getTime())&&!isNaN(e2.getTime()) ? Math.round((e2.getTime()-e1.getTime())/60000) : 0
-    const dirRaw = get(cols,['direction','dir','side','market pos','market position']) || 'Long'
+    const entryStr = get(cols,['entry time','time'])
+    const exitStr = get(cols,['exit time'])
+    const parseDate = (s: string) => {
+      const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/)
+      if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`)
+      return new Date(s)
+    }
+    const d1 = parseDate(entryStr), d2 = parseDate(exitStr || entryStr)
+    const dur = !isNaN(d1.getTime())&&!isNaN(d2.getTime()) ? Math.round((d2.getTime()-d1.getTime())/60000) : 0
+    const dirRaw = get(cols,['market pos','direction','side','action']) || 'Long'
     trades.push({
-      id: `${account}-${i}`, ninja_id: `${account}-${i}`, account,
-      strategy: get(cols,['strategy','strategia']) || 'Manual',
-      instrument: get(cols,['instrument','strumento','market','ticker','symbol']) || 'N/A',
-      direction: dirRaw.toLowerCase().includes('short') ? 'Short' : 'Long',
-      entry_time: entryStr, exit_time: exitStr, duration_min: dur,
-      entry_price: pn(get(cols,['entry price','avg entry'])),
-      exit_price: pn(get(cols,['exit price','avg exit'])),
-      quantity: parseInt(get(cols,['quantity','qty','size'])) || 1,
-      pnl, commission: comm, net_pnl: pnl - comm,
-      mae: pn(get(cols,['mae'])) || undefined,
-      mfe: pn(get(cols,['mfe'])) || undefined,
+      id: `${account}-${i}`, ninja_id: `${account}-G-${i}`, account,
+      strategy: get(cols,['strategy']) || 'Manual',
+      instrument: get(cols,['instrument','market','symbol']) || 'N/A',
+      direction: dirRaw.toLowerCase().includes('short')||dirRaw.toLowerCase()==='sell'?'Short':'Long',
+      entry_time: isNaN(d1.getTime())?entryStr:d1.toISOString(),
+      exit_time: isNaN(d2.getTime())?exitStr:d2.toISOString(),
+      duration_min: dur,
+      entry_price: pn(get(cols,['entry price','price'])),
+      exit_price: pn(get(cols,['exit price'])),
+      quantity: parseInt(get(cols,['qty','quantity','size'])) || 1,
+      pnl, commission: comm, net_pnl: pnl-comm,
+      mae: pn(get(cols,['mae']))||undefined,
+      mfe: pn(get(cols,['mfe']))||undefined,
       emotion_tags: [], rule_followed: undefined, notes: '',
     })
   }
@@ -131,9 +250,14 @@ function computeStatsFromTrades(trades: Trade[]): Partial<PerfReport> & { equity
 
   // By weekday
   const byDayMap: Record<number,{pnl:number;count:number;wins:number}> = {}
+  const parseTradeDate = (s: string) => {
+    const m = s?.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+    if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00`)
+    return new Date(s || '')
+  }
   trades.forEach(t => {
     if (!t.entry_time) return
-    const d = new Date(t.entry_time); if(isNaN(d.getTime())) return
+    const d = parseTradeDate(t.entry_time); if(isNaN(d.getTime())) return
     const wd = d.getDay()
     if (!byDayMap[wd]) byDayMap[wd] = {pnl:0,count:0,wins:0}
     byDayMap[wd].pnl += t.net_pnl; byDayMap[wd].count++
@@ -150,7 +274,7 @@ function computeStatsFromTrades(trades: Trade[]): Partial<PerfReport> & { equity
   const byHourMap: Record<number,{pnl:number;count:number;wins:number}> = {}
   trades.forEach(t => {
     if (!t.entry_time) return
-    const d = new Date(t.entry_time); if(isNaN(d.getTime())) return
+    const d = parseTradeDate(t.entry_time); if(isNaN(d.getTime())) return
     const h = d.getHours()
     if (!byHourMap[h]) byHourMap[h] = {pnl:0,count:0,wins:0}
     byHourMap[h].pnl += t.net_pnl; byHourMap[h].count++
@@ -239,7 +363,15 @@ function PnLCalendar({ trades }: { trades: Trade[] }) {
   const dayMap: Record<string,{pnl:number;trades:number;wins:number}> = {}
   trades.forEach(t => {
     if (!t.entry_time) return
-    const d = new Date(t.entry_time); if(isNaN(d.getTime())) return
+    // Supporta sia ISO (2026-04-09T16:10:56.000Z) che formato italiano (09/04/2026 16:10:56)
+    let d: Date
+    const itMatch = t.entry_time.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+    if (itMatch) {
+      d = new Date(`${itMatch[3]}-${itMatch[2]}-${itMatch[1]}`)
+    } else {
+      d = new Date(t.entry_time)
+    }
+    if(isNaN(d.getTime())) return
     const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
     if (!dayMap[key]) dayMap[key] = {pnl:0,trades:0,wins:0}
     dayMap[key].pnl += t.net_pnl; dayMap[key].trades++
@@ -357,7 +489,7 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)"/>
                 <XAxis dataKey="i" tick={{fontSize:9,fill:'var(--text-2)'}} tickLine={false} axisLine={false} interval={Math.floor(computed.equity.length/5)}/>
                 <YAxis tick={{fontSize:9,fill:'var(--text-2)'}} tickLine={false} axisLine={false} tickFormatter={v=>`$${v}`} width={50}/>
-                <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any) => [`$${v}`,'Equity']}/>
+                <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any) => [`$${v}`,'Equity'] as [string,string]}/>
                 <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)"/>
                 <Area type="monotone" dataKey="value" stroke="#00d4aa" strokeWidth={1.5} fill="url(#eqGrad)" dot={false}/>
               </AreaChart>
@@ -393,7 +525,7 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
               <BarChart data={computed.byDay}>
                 <XAxis dataKey="day" tick={{fontSize:10,fill:'var(--text-2)'}} tickLine={false} axisLine={false}/>
                 <YAxis tick={{fontSize:9,fill:'var(--text-2)'}} tickLine={false} axisLine={false} tickFormatter={v=>`$${v}`} width={45}/>
-                <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any,n:string)=>[n==='pnl'?`$${v}`:`${v}%`,n==='pnl'?'P&L':'Win Rate']}/>
+                <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any,n:any)=>[n==='pnl'?`$${v}`:`${v}%`,n==='pnl'?'P&L':'Win Rate'] as [string,string]}/>
                 <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)"/>
                 <Bar dataKey="pnl" radius={[4,4,0,0]}>{computed.byDay.map((e:any,i:number)=><Cell key={i} fill={e.pnl>=0?'#00d4aa':'#ff4d6d'}/>)}</Bar>
               </BarChart>
@@ -477,7 +609,7 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
               <XAxis dataKey="mae" name="MAE" tick={{fontSize:9,fill:'var(--text-2)'}} tickLine={false} axisLine={false} label={{value:'MAE ($)',position:'bottom',fontSize:10,fill:'var(--text-2)'}} tickFormatter={v=>`$${v}`}/>
               <YAxis dataKey="mfe" name="MFE" tick={{fontSize:9,fill:'var(--text-2)'}} tickLine={false} axisLine={false} label={{value:'MFE ($)',angle:-90,position:'insideLeft',fontSize:10,fill:'var(--text-2)'}} tickFormatter={v=>`$${v}`}/>
               <ZAxis dataKey="size" range={[30,200]}/>
-              <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any,n:string) => [`$${v}`,n]}/>
+              <Tooltip contentStyle={{background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,fontSize:11}} formatter={(v:any) => [`$${v}`,'P&L'] as [string,string]}/>
               <Scatter data={computed.maeFmeData.map(d => ({...d, fill:d.pnl>=0?'rgba(0,212,170,0.6)':'rgba(255,77,109,0.6)'}))} fill="#00d4aa">
                 {computed.maeFmeData.map((d:any,i:number) => <Cell key={i} fill={d.pnl>=0?'rgba(0,212,170,0.6)':'rgba(255,77,109,0.6)'}/>)}
               </Scatter>
@@ -674,8 +806,12 @@ function EmotionAnalytics({ trades }: { trades: Trade[] }) {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function TradesAdvanced({ userId, tradesHook }: { userId: string; tradesHook?: any }) {
-  const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>({})
-  const [trades, setTrades] = useState<Trade[]>([])
+  const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>(() => {
+    try { const s = sessionStorage.getItem('alphadesk_perf'); return s ? JSON.parse(s) : {} } catch { return {} }
+  })
+  const [trades, setTrades] = useState<Trade[]>(() => {
+    try { const s = sessionStorage.getItem('alphadesk_trades'); return s ? JSON.parse(s) : [] } catch { return [] }
+  })
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const [tab, setTab] = useState<'stats'|'calendar'|'list'|'emotion'|'sync'>('stats')
   const [importing, setImporting] = useState(false)
@@ -714,7 +850,11 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       const s = parseNinjaPerfReport(text)
       if (!s) { setImportMsg('⚠ Formato non riconosciuto. Usa il Performance Report di NinjaTrader.'); setImporting(false); return }
       if (tradesHook) await tradesHook.savePerfReport(accountName.trim(), s)
-      else setPerfStats(prev=>({...prev,[accountName.trim()]:s}))
+      else {
+        const updated = {...perfStats,[accountName.trim()]:s}
+        setPerfStats(updated)
+        try { sessionStorage.setItem('alphadesk_perf', JSON.stringify(updated)) } catch {}
+      }
       setSelectedAccounts([accountName.trim()])
       setImportMsg(`✓ Performance Report salvato — ${s.totalTrades} trade · Net P&L ${fmtUSD(s.totalNetProfit)}`)
     } else {
@@ -723,7 +863,12 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       const existing = new Map(allTrades.filter((t:Trade)=>t.account===accountName.trim()).map((t:Trade)=>[t.ninja_id,t]))
       const merged = parsed.map(t => { const old=existing.get(t.ninja_id||''); return old?{...t,emotion_tags:(old as any).emotion_tags,rule_followed:(old as any).rule_followed,notes:(old as any).notes,setup_quality:(old as any).setup_quality}:t })
       if (tradesHook) { await tradesHook.saveTrades(merged, accountName.trim()); setImportMsg(`✓ ${merged.length} trade salvati in cloud — non dovrai ricaricarli al prossimo accesso`) }
-      else { setTrades(prev=>[...prev.filter(t=>t.account!==accountName.trim()),...merged]); setImportMsg(`✓ ${merged.length} trade importati`) }
+      else {
+        const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
+        setTrades(updated)
+        try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+        setImportMsg(`✓ ${merged.length} trade importati — i dati rimangono durante la sessione`)
+      }
       setSelectedAccounts([accountName.trim()])
     }
     setImporting(false)
@@ -800,8 +945,8 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
               ))}
               {strategies.length>2&&<>
                 <div style={{width:1,height:16,background:'var(--border)'}}></div>
-                {strategies.map(s=>(
-                  <button key={s} onClick={()=>setFilterStrategy(s)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:filterStrategy===s?'rgba(245,166,35,0.15)':'transparent',color:filterStrategy===s?'var(--amber)':'var(--text-2)',cursor:'pointer',fontSize:11}}>{s==='all'?'Tutte':s}</button>
+                {(strategies as string[]).map(s=>(
+                  <button key={String(s)} onClick={()=>setFilterStrategy(s)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:filterStrategy===s?'rgba(245,166,35,0.15)':'transparent',color:filterStrategy===s?'var(--amber)':'var(--text-2)',cursor:'pointer',fontSize:11}}>{s==='all'?'Tutte':s}</button>
                 ))}
               </>}
               <div style={{marginLeft:'auto',fontSize:11,color:'var(--text-2)'}}>{filteredTrades.length} trade</div>
