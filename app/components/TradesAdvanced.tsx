@@ -861,10 +861,10 @@ function AccountRow({ account, onRename, onDelete, tradeCount }: {
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function TradesAdvanced({ userId, tradesHook }: { userId: string; tradesHook?: any }) {
   const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>(() => {
-    try { const s = sessionStorage.getItem('alphadesk_perf'); return s ? JSON.parse(s) : {} } catch { return {} }
+    try { const s = localStorage.getItem('alphadesk_perf'); return s ? JSON.parse(s) : {} } catch { return {} }
   })
   const [trades, setTrades] = useState<Trade[]>(() => {
-    try { const s = sessionStorage.getItem('alphadesk_trades'); return s ? JSON.parse(s) : [] } catch { return [] }
+    try { const s = localStorage.getItem('alphadesk_trades'); return s ? JSON.parse(s) : [] } catch { return [] }
   })
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const [tab, setTab] = useState<'stats'|'calendar'|'list'|'emotion'|'sync'>('stats')
@@ -925,13 +925,13 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         // Fallback locale se Supabase fallisce
         const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
         setTrades(updated)
-        try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+        try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
         setImportMsg(`✓ ${merged.length} trade caricati localmente per "${accountName.trim()}"`)
       }
     } else {
       const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
       setTrades(updated)
-      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
       setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}"`)
     }
     setSelectedAccounts([accountName.trim()])
@@ -988,7 +988,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                     const updated = src.map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
                     if (!tradesHook) {
                       setTrades(updated)
-                      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
                     } else {
                       // Aggiorna stato locale del hook
                       tradesHook.renameTrades && tradesHook.renameTrades(oldName, newName)
@@ -999,7 +999,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                     if (!tradesHook) {
                       const updated = trades.filter((t: Trade) => t.account !== accountName)
                       setTrades(updated)
-                      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
                     } else {
                       tradesHook.deleteTrades && tradesHook.deleteTrades(accountName)
                     }

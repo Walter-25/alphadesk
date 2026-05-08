@@ -81,13 +81,25 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>Conto da sincronizzare</div>
-            <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
-              style={{ ...inp, marginBottom: 8 }}>
-              {[...new Set([...accounts, ...(selectedAccount && !accounts.includes(selectedAccount) ? [selectedAccount] : [])])].map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
+            {/* Conto: select se esistono conti, altrimenti input libero */}
+            {accounts.length > 0 ? (
+              <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
+                style={{ ...inp, marginBottom: 8 }}>
+                {[...new Set([...accounts, ...(selectedAccount && !accounts.includes(selectedAccount) ? [selectedAccount] : [])])].map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            ) : (
+              <input value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
+                placeholder="Nome conto (es. LucidProp)"
+                style={{ ...inp, marginBottom: 8 }} />
+            )}
             {selectedAccount && getSyncInfo(selectedAccount) && (
-              <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
+              <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', marginBottom: 4 }}>
                 Ultima sync: {new Date(getSyncInfo(selectedAccount)!.last_sync).toLocaleString('it-IT')}
+              </div>
+            )}
+            {!selectedAccount && (
+              <div style={{ fontSize: 11, color: 'var(--amber)', marginBottom: 4 }}>
+                ⚠ Inserisci un nome conto per continuare
               </div>
             )}
           </div>
@@ -143,8 +155,10 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
                       <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="Lascia vuoto per usare il default" />
                     </div>
                     <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
-                      Usa le stesse credenziali di <strong>trader.tradovate.com</strong><br/>
-                      Per <strong>Lucid Trading</strong>: le credenziali sono quelle del portale Lucid (che usa Tradovate come piattaforma).
+                      <strong style={{color:'var(--text-0)'}}>Email e password</strong> da usare:<br/>
+                      • <strong>Lucid Trading</strong>: email e password con cui ti sei registrato su lucidtrading.com<br/>
+                      • Non usare l'ID conto (es. LTTH8J2N35X) — serve l'<strong>email</strong><br/>
+                      • Se hai dubbi: apri trader.tradovate.com → prova a fare login con quelle credenziali
                     </div>
                   </div>
                 )}
@@ -155,7 +169,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
           <div style={{fontSize:11,color:'var(--text-2)',marginBottom:8,padding:'6px 10px',background:'var(--bg-3)',borderRadius:6}}>
             ⏰ Sincronizzazione automatica: <strong>22:30</strong> — o manuale in qualsiasi momento
           </div>
-          <button onClick={handleSync} disabled={syncing || !selectedAccount}
+          <button onClick={handleSync} disabled={syncing || !selectedAccount.trim()}
             style={{ padding: '10px', background: syncing ? 'var(--bg-4)' : 'var(--accent)', border: 'none', borderRadius: 8, color: syncing ? 'var(--text-2)' : '#000', fontSize: 13, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {syncing ? '⟳ Sincronizzando...' : '⚡ Sincronizza ora'}
           </button>
