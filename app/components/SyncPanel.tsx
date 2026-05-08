@@ -10,18 +10,19 @@ interface SyncPanelProps {
 }
 
 const BROKERS = [
-  { id: 'ninjatrader', label: 'NinjaTrader 8', icon: '⚡', color: '#4da6ff', desc: 'API locale porta 36973' },
-  { id: 'interactive_brokers', label: 'Interactive Brokers', icon: '🏦', color: '#f5a623', desc: 'TWS FlexQuery API' },
-  { id: 'tradovate', label: 'Tradovate', icon: '📊', color: '#00d4aa', desc: 'REST API live' },
-  { id: 'rithmic', label: 'Rithmic / AMP', icon: '🔌', color: '#9b59b6', desc: 'Prossimamente' },
-  { id: 'atas', label: 'ATAS', icon: '📈', color: '#e67e22', desc: 'Prossimamente' },
+  { id: 'tradovate', label: 'Tradovate Live', icon: '📊', color: '#00d4aa', desc: 'Conto live reale' },
+  { id: 'tradovate_prop', label: 'Tradovate Prop', icon: '🏆', color: '#4da6ff', desc: 'Prop / Simulazione (Lucid, Apex...)' },
+  { id: 'ninjatrader', label: 'NinjaTrader 8', icon: '⚡', color: '#f5a623', desc: 'API locale porta 36973' },
+  { id: 'interactive_brokers', label: 'Interactive Brokers', icon: '🏦', color: '#9b59b6', desc: 'TWS FlexQuery API' },
+  { id: 'rithmic', label: 'Rithmic / AMP', icon: '🔌', color: '#4a6278', desc: 'Prossimamente' },
+  { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Prossimamente' },
 ]
 
 export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPanelProps) {
   const [selectedAccount, setSelectedAccount] = useState(accounts[0] || '')
   const [newAccountName, setNewAccountName] = useState('')
   const [showAddAccount, setShowAddAccount] = useState(false)
-  const [selectedBroker, setSelectedBroker] = useState('ninjatrader')
+  const [selectedBroker, setSelectedBroker] = useState('tradovate_prop')
   const [syncing, setSyncing] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [showConfig, setShowConfig] = useState(false)
@@ -122,22 +123,28 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
                     </div>
                   </>
                 )}
-                {selectedBroker === 'tradovate' && (
+                {(selectedBroker === 'tradovate' || selectedBroker === 'tradovate_prop') && (
                   <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    {selectedBroker === 'tradovate_prop' && (
+                      <div style={{padding:'8px 10px',background:'rgba(77,166,255,0.1)',borderRadius:6,fontSize:11,color:'#4da6ff',lineHeight:1.5}}>
+                        🏆 <strong>Tradovate Prop</strong> — usa le credenziali del tuo account Tradovate normale. L'endpoint si connette automaticamente all'ambiente di simulazione.
+                      </div>
+                    )}
                     <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Username Tradovate</div>
-                      <input style={inp} value={config.tvUser || ''} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="La tua email Tradovate" />
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Email account Tradovate</div>
+                      <input style={inp} value={config.tvUser || ''} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="email@esempio.com" />
                     </div>
                     <div>
                       <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Password Tradovate</div>
-                      <input style={{...inp, fontFamily:'monospace'}} type="password" value={config.tvPass || ''} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="Password account" />
+                      <input style={{...inp}} type="password" value={config.tvPass || ''} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="••••••••" />
                     </div>
                     <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>API Key (opzionale)</div>
-                      <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="App ID da developer.tradovate.com" />
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>CID (App ID) — opzionale</div>
+                      <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="Lascia vuoto per usare il default" />
                     </div>
-                    <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'6px 8px',background:'var(--bg-2)',borderRadius:5}}>
-                      Tradovate API: accedi su <strong>trader.tradovate.com</strong> → Account → API Access → genera credenziali. Per Lucid Trading, usa le stesse credenziali del portale Lucid.
+                    <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+                      Usa le stesse credenziali di <strong>trader.tradovate.com</strong><br/>
+                      Per <strong>Lucid Trading</strong>: le credenziali sono quelle del portale Lucid (che usa Tradovate come piattaforma).
                     </div>
                   </div>
                 )}
