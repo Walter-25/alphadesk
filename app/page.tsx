@@ -339,6 +339,7 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
     { id: 'playbook', label: 'Playbook', icon: '◎' },
     { id: 'revisione', label: 'Revisione', icon: '◐' },
     { id: 'eseguiti', label: 'Eseguiti', icon: '◑' },
+    { id: 'operativita', label: 'Operatività', icon: '◐' },
     { id: 'sistemi', label: 'Sistemi Auto', icon: '◒' },
     { id: 'journal', label: 'Journal', icon: '○' },
   ]
@@ -438,6 +439,7 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
     playbook: <PagePlaybook />,
     revisione: <PageRevisione />,
     eseguiti: <TradesAdvanced userId={user.id} tradesHook={tradesHook} />,
+    operativita: <PageOperativita tradesHook={tradesHook} />,
     sistemi: <PageSistemi />,
     journal: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
@@ -451,6 +453,202 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
           {pages[active]}
         </div>
       </main>
+    </div>
+  )
+}
+
+// ─── PAGINA OPERATIVITÀ ───────────────────────────────────────────────────────
+function PageOperativita({ tradesHook }: { tradesHook: any }) {
+  const [selectedAccount, setSelectedAccount] = useState<string>('all')
+  const [selectedStrategy, setSelectedStrategy] = useState<string>('all')
+  const accounts = tradesHook?.accounts || []
+  const allTrades = tradesHook?.trades || []
+
+  const filtered = allTrades.filter((t: any) =>
+    (selectedAccount === 'all' || t.account === selectedAccount) &&
+    (selectedStrategy === 'all' || t.strategy === selectedStrategy)
+  )
+  const strategies = ['all', ...new Set(
+    allTrades.filter((t: any) => selectedAccount === 'all' || t.account === selectedAccount).map((t: any) => t.strategy)
+  )] as string[]
+
+  const pc = (v: number) => v >= 0 ? '#00d4aa' : '#ff4d6d'
+  const fmtUSD = (v: number) => `${v >= 0 ? '+' : ''}$${Math.abs(v).toFixed(2)}`
+
+  // Stats per conto
+  const byAccount = accounts.map((acc: string) => {
+    const t = allTrades.filter((x: any) => x.account === acc)
+    const wins = t.filter((x: any) => x.net_pnl > 0)
+    const pnl = t.reduce((s: number, x: any) => s + x.net_pnl, 0)
+    const perf = tradesHook?.perfReports?.[acc]
+    return {
+      account: acc,
+      trades: t.length || perf?.totalTrades || 0,
+      pnl: t.length > 0 ? pnl : perf?.totalNetProfit || 0,
+      winRate: t.length > 0 ? wins.length / t.length * 100 : perf?.winRate || 0,
+      rr: perf?.rrRatio || 0,
+      hasDetail: t.length > 0,
+    }
+  })
+
+  // Stats per strategia (se trade singoli disponibili)
+  const byStrategy = strategies.slice(1).map((strat: string) => {
+    const t = filtered.filter((x: any) => x.strategy === strat)
+    const wins = t.filter((x: any) => x.net_pnl > 0)
+    const pnl = t.reduce((s: number, x: any) => s + x.net_pnl, 0)
+    return { strategy: strat, trades: t.length, pnl, winRate: t.length > 0 ? wins.length / t.length * 100 : 0 }
+  })
+
+  // Emotion summary
+  const EMOTION_COLORS: Record<string, string> = {
+    fomo: '#f5a623', revenge: '#ff4d6d', early_exit: '#4da6ff',
+    overtrading: '#ff6b35', hesitation: '#9b59b6', disciplined: '#00d4aa',
+    patient: '#2ecc71', overconfident: '#e67e22', fear: '#e74c3c', plan_trade: '#1abc9c'
+  }
+  const tagMap: Record<string, {pnl: number; wins: number; count: number}> = {}
+  filtered.forEach((t: any) => {
+    (t.emotion_tags || []).forEach((tag: string) => {
+      if (!tagMap[tag]) tagMap[tag] = {pnl: 0, wins: 0, count: 0}
+      tagMap[tag].pnl += t.net_pnl; tagMap[tag].count++
+      if (t.net_pnl > 0) tagMap[tag].wins++
+    })
+  })
+  const emotionStats = Object.entries(tagMap).map(([tag, v]) => ({
+    tag, pnl: v.pnl, count: v.count, wr: v.wins / v.count * 100,
+    color: EMOTION_COLORS[tag] || '#8fa3b8'
+  })).sort((a, b) => b.count - a.count)
+
+  const ruleYes = filtered.filter((t: any) => t.rule_followed === true)
+  const ruleNo = filtered.filter((t: any) => t.rule_followed === false)
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:20}}>
+      <div style={{fontFamily:'var(--font-display)',fontWeight:700,fontSize:26,letterSpacing:'-0.02em'}}>Analisi Operatività</div>
+
+      {accounts.length === 0 ? (
+        <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:40,textAlign:'center'}}>
+          <div style={{fontSize:32,opacity:0.2,marginBottom:12}}>◑</div>
+          <div style={{fontSize:14,color:'var(--text-1)'}}>Nessun dato — importa i tuoi eseguiti nella sezione Eseguiti</div>
+        </div>
+      ) : (
+        <>
+          {/* Riepilogo per conto */}
+          <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:18}}>
+            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:14}}>Performance per conto</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:10}}>
+              {byAccount.map((acc: any) => (
+                <div key={acc.account} style={{background:'var(--bg-3)',borderRadius:10,padding:'14px 16px',border:`1px solid ${selectedAccount===acc.account?'var(--accent)':'var(--border)'}`,cursor:'pointer'}}
+                  onClick={()=>setSelectedAccount(selectedAccount===acc.account?'all':acc.account)}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <div style={{fontSize:14,fontWeight:600,color:'var(--text-0)',fontFamily:'var(--font-mono)'}}>{acc.account}</div>
+                    {!acc.hasDetail && <span style={{fontSize:9,padding:'2px 6px',borderRadius:3,background:'var(--amber-dim)',color:'var(--amber)'}}>Solo summary</span>}
+                  </div>
+                  <div style={{fontSize:22,fontFamily:'var(--font-mono)',fontWeight:800,color:pc(acc.pnl),marginBottom:8}}>{fmtUSD(acc.pnl)}</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:11}}>
+                    <div><div style={{color:'var(--text-2)'}}>Trade</div><div style={{fontFamily:'var(--font-mono)',fontWeight:500}}>{acc.trades}</div></div>
+                    <div><div style={{color:'var(--text-2)'}}>Win Rate</div><div style={{fontFamily:'var(--font-mono)',fontWeight:500,color:acc.winRate>=50?'#00d4aa':'#ff4d6d'}}>{acc.winRate.toFixed(1)}%</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Filtri */}
+          <div style={{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase'}}>Conto:</div>
+            <button onClick={()=>setSelectedAccount('all')} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${selectedAccount==='all'?'var(--accent)':'var(--border)'}`,background:selectedAccount==='all'?'var(--accent-dim)':'transparent',color:selectedAccount==='all'?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11}}>Tutti</button>
+            {accounts.map((a: string) => (
+              <button key={a} onClick={()=>setSelectedAccount(a)} style={{padding:'5px 12px',borderRadius:5,border:`1px solid ${selectedAccount===a?'var(--accent)':'var(--border)'}`,background:selectedAccount===a?'var(--accent-dim)':'transparent',color:selectedAccount===a?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11,fontFamily:'var(--font-mono)'}}>{a}</button>
+            ))}
+            {strategies.length > 2 && <>
+              <div style={{width:1,height:16,background:'var(--border)'}}></div>
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase'}}>Strategia:</div>
+              {strategies.map(s => (
+                <button key={s} onClick={()=>setSelectedStrategy(s)} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${selectedStrategy===s?'var(--amber)':'var(--border)'}`,background:selectedStrategy===s?'rgba(245,166,35,0.15)':'transparent',color:selectedStrategy===s?'var(--amber)':'var(--text-1)',cursor:'pointer',fontSize:11}}>{s==='all'?'Tutte':s}</button>
+              ))}
+            </>}
+          </div>
+
+          {/* Performance per strategia */}
+          {byStrategy.length > 0 && filtered.length > 0 && (
+            <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:18}}>
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:14}}>Performance per strategia</div>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {byStrategy.map((s: any) => (
+                  <div key={s.strategy} style={{display:'grid',gridTemplateColumns:'140px 1fr 80px 80px 80px',alignItems:'center',gap:12,padding:'10px 14px',background:'var(--bg-3)',borderRadius:8}}>
+                    <div style={{fontSize:13,fontWeight:500,color:'var(--text-0)'}}>{s.strategy}</div>
+                    <div style={{height:8,background:'var(--bg-2)',borderRadius:4,overflow:'hidden',position:'relative'}}>
+                      <div style={{position:'absolute',left:'50%',top:0,width:1,height:'100%',background:'var(--border)'}}></div>
+                      <div style={{position:'absolute',left:s.pnl>=0?'50%':'auto',right:s.pnl<0?'50%':'auto',width:`${Math.min(Math.abs(s.pnl)/Math.max(...byStrategy.map((x:any)=>Math.abs(x.pnl)),1)*50,50)}%`,height:'100%',background:s.pnl>=0?'#00d4aa':'#ff4d6d',opacity:0.8}}></div>
+                    </div>
+                    <div style={{fontSize:11,color:'var(--text-2)',textAlign:'center'}}>{s.trades} trade</div>
+                    <div style={{fontSize:12,fontFamily:'var(--font-mono)',color:s.winRate>=50?'#00d4aa':'#ff4d6d',textAlign:'center'}}>{s.winRate.toFixed(0)}% WR</div>
+                    <div style={{fontSize:12,fontFamily:'var(--font-mono)',fontWeight:600,color:pc(s.pnl),textAlign:'right'}}>{fmtUSD(s.pnl)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Psico-emotivo dettagliato */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+            {/* Disciplina */}
+            <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:18}}>
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:14}}>Disciplina — regole operative</div>
+              {ruleYes.length === 0 && ruleNo.length === 0 ? (
+                <div style={{fontSize:12,color:'var(--text-2)',textAlign:'center',padding:'20px 0'}}>Vai in Eseguiti → Lista Trade e valuta le regole espandendo ogni trade</div>
+              ) : (
+                <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                  {[
+                    {label:'✓ Regole rispettate',trades:ruleYes,c:'#00d4aa'},
+                    {label:'✗ Regole NON rispettate',trades:ruleNo,c:'#ff4d6d'},
+                  ].map(r => {
+                    const pnl = r.trades.reduce((s: number, t: any) => s+t.net_pnl, 0)
+                    const wr = r.trades.length > 0 ? r.trades.filter((t: any) => t.net_pnl > 0).length / r.trades.length * 100 : 0
+                    return (
+                      <div key={r.label} style={{background:'var(--bg-3)',borderRadius:10,padding:'12px 14px'}}>
+                        <div style={{fontSize:12,fontWeight:600,color:r.c,marginBottom:8}}>{r.label}</div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,fontSize:12}}>
+                          <div><div style={{fontSize:10,color:'var(--text-2)'}}>Trade</div><div style={{fontFamily:'var(--font-mono)',fontWeight:700}}>{r.trades.length}</div></div>
+                          <div><div style={{fontSize:10,color:'var(--text-2)'}}>Win Rate</div><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:wr>=50?'#00d4aa':'#ff4d6d'}}>{wr.toFixed(0)}%</div></div>
+                          <div><div style={{fontSize:10,color:'var(--text-2)'}}>P&L</div><div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:pc(pnl)}}>{fmtUSD(pnl)}</div></div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {ruleNo.length > 0 && ruleYes.length > 0 && (() => {
+                    const diffPnl = ruleYes.reduce((s: number, t: any) => s+t.net_pnl, 0) - ruleNo.reduce((s: number, t: any) => s+t.net_pnl, 0)
+                    return diffPnl > 0 ? (
+                      <div style={{padding:'10px 12px',background:'var(--accent-dim)',borderRadius:8,fontSize:12,color:'var(--accent)'}}>
+                        ◈ La disciplina vale <strong>{fmtUSD(diffPnl)}</strong> in più rispetto ai trade fuori regole.
+                      </div>
+                    ) : null
+                  })()}
+                </div>
+              )}
+            </div>
+
+            {/* Tag emotivi */}
+            <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:18}}>
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:14}}>Performance per stato emotivo</div>
+              {emotionStats.length === 0 ? (
+                <div style={{fontSize:12,color:'var(--text-2)',textAlign:'center',padding:'20px 0'}}>Nessun tag emotivo ancora — aggiungili espandendo i trade singoli</div>
+              ) : emotionStats.map((e: any) => (
+                <div key={e.tag} style={{display:'flex',alignItems:'center',gap:10,marginBottom:8,padding:'8px 10px',background:'var(--bg-3)',borderRadius:7}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:e.color,flexShrink:0,boxShadow:`0 0 4px ${e.color}`}}></div>
+                  <div style={{flex:1,fontSize:12,fontWeight:500,color:'var(--text-0)'}}>{e.tag}</div>
+                  <div style={{fontSize:11,color:'var(--text-2)',width:55}}>{e.count} trade</div>
+                  <div style={{width:80,height:5,background:'var(--bg-2)',borderRadius:3,overflow:'hidden'}}>
+                    <div style={{width:`${e.wr}%`,height:'100%',background:e.wr>=50?'#00d4aa':'#ff4d6d',borderRadius:3}}></div>
+                  </div>
+                  <div style={{fontSize:11,fontFamily:'var(--font-mono)',color:e.wr>=50?'#00d4aa':'#ff4d6d',width:36}}>{e.wr.toFixed(0)}%</div>
+                  <div style={{fontSize:12,fontFamily:'var(--font-mono)',fontWeight:600,color:pc(e.pnl),width:72,textAlign:'right'}}>{fmtUSD(e.pnl)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

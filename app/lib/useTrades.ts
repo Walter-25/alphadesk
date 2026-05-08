@@ -115,40 +115,111 @@ export function useTrades(userId: string) {
   }, [userId, loadAll])
 
   // Statistiche aggregate multi-conto per dashboard
+  // Legge sia trade singoli che perfReports (Summary)
   const getDashboardStats = useCallback((selectedAccounts: string[]) => {
-    const relevant = selectedAccounts.length === 0
-      ? trades
-      : trades.filter(t => selectedAccounts.includes(t.account))
-    if (relevant.length === 0) return null
-    const wins = relevant.filter(t => t.net_pnl > 0)
-    const totalPnl = relevant.reduce((s, t) => s + t.net_pnl, 0)
-    const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + t.net_pnl, 0) / wins.length : 0
-    const avgLoss = relevant.filter(t => t.net_pnl < 0).length > 0
-      ? Math.abs(relevant.filter(t => t.net_pnl < 0).reduce((s, t) => s + t.net_pnl, 0) / relevant.filter(t => t.net_pnl < 0).length) : 0
+    const accs = selectedAccounts.length === 0 ? undefined : selectedAccounts
 
-    // Equity curve ultimi 30 trade
-    let cum = 0
-    const equity = [...relevant].reverse().slice(0, 60).map(t => {
-      cum += t.net_pnl
-      return { date: t.entry_time?.split('T')[0] || t.entry_time?.split(' ')[0] || '', value: parseFloat(cum.toFixed(2)) }
-    })
+    // --- Da trade singoli ---
+    const relevant = trades.filter(t => !accs || accs.includes(t.account))
 
-    // P&L ultimi 7 giorni
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-    const recent = relevant.filter(t => t.entry_time && new Date(t.entry_time) > sevenDaysAgo)
-    const recentPnl = recent.reduce((s, t) => s + t.net_pnl, 0)
+    // --- Da perfReports (Summary) ---
+    const relevantReports = Object.entries(perfReports)
+      .filter(([acc]) => !accs || accs.includes(acc))
+      .map(([, r]) => r)
+
+    // Se non ho né trade né report, return null
+    if (relevant.length === 0 && relevantReports.length === 0) return null
+
+    // Calcola da trade singoli se disponibili, altrimenti aggrega i summary
+    let totalPnl = 0, winRate = 0, totalTrades = 0, rr = 0
+    let recentPnl = 0, recentTrades = 0
+    let equity: {date: string; value: number}[] = []
+    let emotionData: {tag: string; pnl: number; wr: number; count: number}[] = []
+    let disciplineData = { withRules: { pnl: 0, wr: 0, count: 0 }, withoutRules: { pnl: 0, wr: 0, count: 0 } }
+
+    if (relevant.length > 0) {
+      const wins = relevant.filter(t => t.net_pnl > 0)
+      const losses = relevant.filter(t => t.net_pnl < 0)
+      totalPnl = relevant.reduce((s, t) => s + t.net_pnl, 0)
+      winRate = wins.length / relevant.length * 100
+      totalTrades = relevant.length
+      const avgWin = wins.length > 0 ? wins.reduce((s, t) => s + t.net_pnl, 0) / wins.length : 0
+      const avgLoss = losses.length > 0 ? Math.abs(losses.reduce((s, t) => s + t.net_pnl, 0) / losses.length) : 0
+      rr = avgLoss > 0 ? avgWin / avgLoss : 0
+
+      // Equity curve
+      let cum = 0
+      equity = [...relevant].reverse().slice(0, 60).map(t => {
+        cum += t.net_pnl
+        const raw = t.entry_time || ''
+        const m = raw.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+        const date = m ? `${m[1]}/${m[2]}` : raw.substring(0, 10)
+        return { date, value: parseFloat(cum.toFixed(2)) }
+      })
+
+      // P&L ultimi 7 giorni (supporta date ISO e IT)
+      const parseDate = (s: string) => {
+        const m = s?.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}`)
+        return new Date(s || '')
+      }
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      const recent = relevant.filter(t => { try { return parseDate(t.entry_time) > sevenDaysAgo } catch { return false } })
+      recentPnl = recent.reduce((s, t) => s + t.net_pnl, 0)
+      recentTrades = recent.length
+
+      // Dati emotivi
+      const tagMap: Record<string, {pnl: number; wins: number; count: number}> = {}
+      relevant.forEach(t => {
+        (t.emotion_tags || []).forEach(tag => {
+          if (!tagMap[tag]) tagMap[tag] = {pnl: 0, wins: 0, count: 0}
+          tagMap[tag].pnl += t.net_pnl
+          tagMap[tag].count++
+          if (t.net_pnl > 0) tagMap[tag].wins++
+        })
+      })
+      emotionData = Object.entries(tagMap).map(([tag, v]) => ({
+        tag, pnl: parseFloat(v.pnl.toFixed(2)),
+        wr: parseFloat((v.wins / v.count * 100).toFixed(1)), count: v.count
+      })).sort((a, b) => b.count - a.count).slice(0, 5)
+
+      // Disciplina
+      const withR = relevant.filter(t => t.rule_followed === true)
+      const withoutR = relevant.filter(t => t.rule_followed === false)
+      disciplineData = {
+        withRules: { pnl: parseFloat(withR.reduce((s,t) => s+t.net_pnl, 0).toFixed(2)), wr: withR.length > 0 ? parseFloat((withR.filter(t=>t.net_pnl>0).length/withR.length*100).toFixed(1)) : 0, count: withR.length },
+        withoutRules: { pnl: parseFloat(withoutR.reduce((s,t) => s+t.net_pnl, 0).toFixed(2)), wr: withoutR.length > 0 ? parseFloat((withoutR.filter(t=>t.net_pnl>0).length/withoutR.length*100).toFixed(1)) : 0, count: withoutR.length },
+      }
+    } else if (relevantReports.length > 0) {
+      // Fallback su summary aggregati
+      totalPnl = relevantReports.reduce((s, r) => s + r.totalNetProfit, 0)
+      totalTrades = relevantReports.reduce((s, r) => s + r.totalTrades, 0)
+      const totalWins = relevantReports.reduce((s, r) => s + r.winTrades, 0)
+      winRate = totalTrades > 0 ? totalWins / totalTrades * 100 : 0
+      rr = relevantReports.reduce((s, r) => s + r.rrRatio, 0) / relevantReports.length
+      recentPnl = totalPnl // non abbiamo breakdown temporale dal summary
+    }
+
+    const allAccounts = [...new Set([
+      ...relevant.map(t => t.account),
+      ...Object.keys(perfReports)
+    ])]
 
     return {
       totalPnl: parseFloat(totalPnl.toFixed(2)),
       recentPnl: parseFloat(recentPnl.toFixed(2)),
-      winRate: parseFloat((wins.length / relevant.length * 100).toFixed(1)),
-      totalTrades: relevant.length,
-      recentTrades: recent.length,
-      rr: avgLoss > 0 ? parseFloat((avgWin / avgLoss).toFixed(2)) : 0,
+      winRate: parseFloat(winRate.toFixed(1)),
+      totalTrades,
+      recentTrades,
+      rr: parseFloat(rr.toFixed(2)),
       equity,
-      accounts: [...new Set(relevant.map(t => t.account))],
+      emotionData,
+      disciplineData,
+      hasTrades: relevant.length > 0,
+      hasReports: relevantReports.length > 0,
+      accounts: accs || allAccounts,
     }
-  }, [trades])
+  }, [trades, perfReports])
 
   const accounts = [...new Set([...Object.keys(perfReports), ...trades.map(t => t.account)])]
 

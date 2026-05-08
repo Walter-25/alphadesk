@@ -804,6 +804,32 @@ function EmotionAnalytics({ trades }: { trades: Trade[] }) {
   )
 }
 
+
+// ─── ACCOUNT ROW ─────────────────────────────────────────────────────────────
+function AccountRow({ account, onRename }: { account: string; onRename: (o: string, n: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(account)
+  const save = () => {
+    if (name.trim() && name.trim() !== account) onRename(account, name.trim())
+    setEditing(false)
+  }
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--bg-3)',borderRadius:8}}>
+      <div style={{width:8,height:8,borderRadius:'50%',background:'var(--accent)',flexShrink:0}}></div>
+      {editing ? (
+        <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&save()} onBlur={save} autoFocus
+          style={{flex:1,padding:'4px 8px',background:'var(--bg-2)',border:'1px solid var(--accent)',borderRadius:5,color:'var(--text-0)',fontSize:13,fontFamily:'var(--font-mono)',outline:'none'}}/>
+      ) : (
+        <div style={{flex:1,fontSize:13,fontFamily:'var(--font-mono)',fontWeight:500,color:'var(--text-0)'}}>{account}</div>
+      )}
+      <button onClick={()=>editing?save():setEditing(true)}
+        style={{padding:'3px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>
+        {editing ? '✓ Salva' : '✏ Rinomina'}
+      </button>
+    </div>
+  )
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function TradesAdvanced({ userId, tradesHook }: { userId: string; tradesHook?: any }) {
   const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>(() => {
@@ -910,6 +936,31 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         </div>
         {importMsg&&<div style={{marginTop:10,padding:'8px 12px',background:importMsg.startsWith('✓')?'var(--green-dim)':'var(--amber-dim)',borderRadius:8,fontSize:12,color:importMsg.startsWith('✓')?'var(--green)':'var(--amber)'}}>{importMsg}</div>}
       </div>
+
+      {/* Gestione conti esistenti */}
+      {accounts.length > 0 && (
+        <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:16}}>
+          <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:12}}>Conti registrati</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            {accounts.map((a: string) => (
+              <AccountRow key={a} account={a}
+                onRename={(oldName: string, newName: string) => {
+                  // Rinomina nei trade locali
+                  const updated = (tradesHook ? tradesHook.trades : trades).map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
+                  if (!tradesHook) {
+                    setTrades(updated)
+                    try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                  }
+                  if (selectedAccounts.includes(oldName)) setSelectedAccounts(prev => prev.map(x => x === oldName ? newName : x))
+                }}
+              />
+            ))}
+          </div>
+          <div style={{marginTop:12,paddingTop:10,borderTop:'1px solid var(--border)',fontSize:11,color:'var(--text-2)'}}>
+            💡 Puoi collegare un conto a Sync senza caricare storico — vai nella tab 🔌 Sync e inserisci il nome del conto.
+          </div>
+        </div>
+      )}
 
       {accounts.length===0 ? (
         <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:48,textAlign:'center'}}>
