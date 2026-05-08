@@ -806,26 +806,54 @@ function EmotionAnalytics({ trades }: { trades: Trade[] }) {
 
 
 // ─── ACCOUNT ROW ─────────────────────────────────────────────────────────────
-function AccountRow({ account, onRename }: { account: string; onRename: (o: string, n: string) => void }) {
+function AccountRow({ account, onRename, onDelete, tradeCount }: {
+  account: string; onRename: (o: string, n: string) => void
+  onDelete: (a: string) => void; tradeCount: number
+}) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(account)
+  const [confirmDel, setConfirmDel] = useState(false)
+
   const save = () => {
-    if (name.trim() && name.trim() !== account) onRename(account, name.trim())
+    const trimmed = name.trim()
+    if (trimmed && trimmed !== account) {
+      onRename(account, trimmed)
+    }
     setEditing(false)
   }
+
+  const handleKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') save()
+    if (e.key === 'Escape') { setName(account); setEditing(false) }
+  }
+
   return (
-    <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',background:'var(--bg-3)',borderRadius:8}}>
-      <div style={{width:8,height:8,borderRadius:'50%',background:'var(--accent)',flexShrink:0}}></div>
+    <div style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:'var(--bg-3)',borderRadius:9,border:'1px solid var(--border)'}}>
+      <div style={{width:8,height:8,borderRadius:'50%',background:'var(--accent)',flexShrink:0,boxShadow:'0 0 5px var(--accent)'}}></div>
       {editing ? (
-        <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&save()} onBlur={save} autoFocus
-          style={{flex:1,padding:'4px 8px',background:'var(--bg-2)',border:'1px solid var(--accent)',borderRadius:5,color:'var(--text-0)',fontSize:13,fontFamily:'var(--font-mono)',outline:'none'}}/>
+        <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={handleKey}
+          autoFocus style={{flex:1,padding:'5px 10px',background:'var(--bg-2)',border:'1px solid var(--accent)',borderRadius:6,color:'var(--text-0)',fontSize:13,fontFamily:'var(--font-mono)',outline:'none'}}/>
       ) : (
         <div style={{flex:1,fontSize:13,fontFamily:'var(--font-mono)',fontWeight:500,color:'var(--text-0)'}}>{account}</div>
       )}
-      <button onClick={()=>editing?save():setEditing(true)}
-        style={{padding:'3px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>
-        {editing ? '✓ Salva' : '✏ Rinomina'}
-      </button>
+      <div style={{fontSize:11,color:'var(--text-2)'}}>{tradeCount} trade</div>
+      {editing ? (
+        <div style={{display:'flex',gap:5}}>
+          <button onClick={save} style={{padding:'4px 12px',borderRadius:5,border:'1px solid var(--accent)',background:'var(--accent-dim)',color:'var(--accent)',cursor:'pointer',fontSize:11,fontWeight:600}}>✓ Salva</button>
+          <button onClick={()=>{setName(account);setEditing(false)}} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>Annulla</button>
+        </div>
+      ) : confirmDel ? (
+        <div style={{display:'flex',gap:5,alignItems:'center'}}>
+          <span style={{fontSize:11,color:'var(--red)'}}>Eliminare tutti i dati?</span>
+          <button onClick={()=>onDelete(account)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--red)',background:'var(--red-dim)',color:'var(--red)',cursor:'pointer',fontSize:11,fontWeight:600}}>Sì, elimina</button>
+          <button onClick={()=>setConfirmDel(false)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>Annulla</button>
+        </div>
+      ) : (
+        <div style={{display:'flex',gap:5}}>
+          <button onClick={()=>setEditing(true)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>✏ Rinomina</button>
+          <button onClick={()=>setConfirmDel(true)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid rgba(255,77,109,0.3)',background:'var(--red-dim)',color:'var(--red)',cursor:'pointer',fontSize:11}}>🗑 Elimina</button>
+        </div>
+      )}
     </div>
   )
 }
@@ -843,7 +871,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [accountName, setAccountName] = useState('')
-  const [fileType, setFileType] = useState<'perf'|'trades'>('perf')
+  const [fileType] = useState<'trades'>('trades')
   const [filterDir, setFilterDir] = useState<'all'|'Long'|'Short'>('all')
   const [filterStrategy, setFilterStrategy] = useState('all')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -872,31 +900,41 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     if (!file||!accountName.trim()) { setImportMsg('⚠ Inserisci prima il nome del conto'); return }
     setImporting(true); setImportMsg('')
     const text = await file.text()
-    if (fileType==='perf') {
-      const s = parseNinjaPerfReport(text)
-      if (!s) { setImportMsg('⚠ Formato non riconosciuto. Usa il Performance Report di NinjaTrader.'); setImporting(false); return }
-      if (tradesHook) await tradesHook.savePerfReport(accountName.trim(), s)
-      else {
-        const updated = {...perfStats,[accountName.trim()]:s}
-        setPerfStats(updated)
-        try { sessionStorage.setItem('alphadesk_perf', JSON.stringify(updated)) } catch {}
-      }
-      setSelectedAccounts([accountName.trim()])
-      setImportMsg(`✓ Performance Report salvato — ${s.totalTrades} trade · Net P&L ${fmtUSD(s.totalNetProfit)}`)
-    } else {
-      const parsed = parseNinjaTradeList(text, accountName.trim())
-      if (!parsed.length) { setImportMsg('⚠ Nessun trade trovato. Controlla il formato.'); setImporting(false); return }
-      const existing = new Map(allTrades.filter((t:Trade)=>t.account===accountName.trim()).map((t:Trade)=>[t.ninja_id,t]))
-      const merged = parsed.map(t => { const old=existing.get(t.ninja_id||''); return old?{...t,emotion_tags:(old as any).emotion_tags,rule_followed:(old as any).rule_followed,notes:(old as any).notes,setup_quality:(old as any).setup_quality}:t })
-      if (tradesHook) { await tradesHook.saveTrades(merged, accountName.trim()); setImportMsg(`✓ ${merged.length} trade salvati in cloud — non dovrai ricaricarli al prossimo accesso`) }
-      else {
+    // Auto-detect: se il file è un Performance Report mostra errore utile
+    if (text.includes('Total net profit') && text.includes('Gross profit') && !text.includes('Entry time') && !text.includes('Entry price')) {
+      setImportMsg('⚠ Questo è un Performance Report (statistiche aggregate). Carica invece la lista trade singoli: su NT8 → New → Trade Performance → scheda "Trades" o "Executions" → Export CSV')
+      setImporting(false)
+      return
+    }
+    const parsed = parseNinjaTradeList(text, accountName.trim())
+    if (!parsed.length) {
+      setImportMsg('⚠ Nessun trade trovato. Assicurati di esportare da: NT8 → New → Trade Performance → scheda "Trades" → tasto destro → Export → CSV')
+      setImporting(false)
+      return
+    }
+    const existing = new Map(allTrades.filter((t:Trade)=>t.account===accountName.trim()).map((t:Trade)=>[t.ninja_id||t.id,t]))
+    const merged = parsed.map(t => {
+      const old = existing.get(t.ninja_id||t.id)
+      return old ? {...t, emotion_tags:(old as any).emotion_tags, rule_followed:(old as any).rule_followed, notes:(old as any).notes, setup_quality:(old as any).setup_quality} : t
+    })
+    if (tradesHook) {
+      const result = await tradesHook.saveTrades(merged, accountName.trim())
+      if (result?.success) {
+        setImportMsg(`✓ ${merged.length} trade salvati in cloud per "${accountName.trim()}" — disponibili ad ogni accesso`)
+      } else {
+        // Fallback locale se Supabase fallisce
         const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
         setTrades(updated)
         try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
-        setImportMsg(`✓ ${merged.length} trade importati — i dati rimangono durante la sessione`)
+        setImportMsg(`✓ ${merged.length} trade caricati localmente per "${accountName.trim()}"`)
       }
-      setSelectedAccounts([accountName.trim()])
+    } else {
+      const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
+      setTrades(updated)
+      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+      setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}"`)
     }
+    setSelectedAccounts([accountName.trim()])
     setImporting(false)
     if (fileRef.current) fileRef.current.value=''
   }, [accountName, fileType, allTrades, tradesHook])
@@ -913,18 +951,17 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:14}}>Importa da NinjaTrader</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
-            <div style={{fontSize:12,fontWeight:500,color:'var(--text-0)',marginBottom:10}}>📂 Import CSV</div>
-            <div style={{display:'flex',gap:6,marginBottom:10}}>
-              <button onClick={()=>setFileType('perf')} style={{flex:1,padding:'6px',borderRadius:6,border:`1px solid ${fileType==='perf'?'var(--accent)':'var(--border)'}`,background:fileType==='perf'?'var(--accent-dim)':'transparent',color:fileType==='perf'?'var(--accent)':'var(--text-2)',cursor:'pointer',fontSize:11}}>Performance Report</button>
-              <button onClick={()=>setFileType('trades')} style={{flex:1,padding:'6px',borderRadius:6,border:`1px solid ${fileType==='trades'?'var(--accent)':'var(--border)'}`,background:fileType==='trades'?'var(--accent-dim)':'transparent',color:fileType==='trades'?'var(--accent)':'var(--text-2)',cursor:'pointer',fontSize:11}}>Lista Trade singoli</button>
-            </div>
-            <input style={{...inp,width:'100%',marginBottom:10}} placeholder="Nome conto (es. Sim101, Live)" value={accountName} onChange={e=>setAccountName(e.target.value)}/>
+            <div style={{fontSize:12,fontWeight:500,color:'var(--text-0)',marginBottom:10}}>📂 Import storico CSV</div>
+            <input style={{...inp,width:'100%',marginBottom:10}} placeholder="Nome conto (es. Sim101, LucidProp)" value={accountName} onChange={e=>setAccountName(e.target.value)}/>
             <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
             <button onClick={()=>fileRef.current?.click()} disabled={importing||!accountName.trim()} style={{width:'100%',padding:'8px',background:accountName.trim()?'var(--accent)':'var(--bg-4)',border:'none',borderRadius:8,color:accountName.trim()?'#000':'var(--text-2)',fontSize:13,fontWeight:600,cursor:accountName.trim()?'pointer':'not-allowed'}}>
               {importing?'Importando...':'Seleziona file CSV'}
             </button>
-            <div style={{fontSize:11,color:'var(--text-2)',marginTop:8,lineHeight:1.6}}>
-              {fileType==='perf'?'NT8: New → Performance → Export CSV (il file che hai già)':'NT8: griglia operazioni → tasto destro → Export → CSV'}
+            <div style={{fontSize:11,color:'var(--text-2)',marginTop:10,lineHeight:1.7,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+              <strong style={{color:'var(--text-0)'}}>Come esportare da NT8:</strong><br/>
+              New → Trade Performance → seleziona conto e periodo<br/>
+              → scheda <strong>"Trades"</strong> → tasto destro → <strong>Export → CSV</strong><br/>
+              <span style={{color:'var(--amber)'}}>⚠ Non usare "Performance" (Summary) — serve la lista trade singoli</span>
             </div>
           </div>
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
@@ -942,19 +979,35 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:16}}>
           <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:12}}>Conti registrati</div>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            {accounts.map((a: string) => (
-              <AccountRow key={a} account={a}
-                onRename={(oldName: string, newName: string) => {
-                  // Rinomina nei trade locali
-                  const updated = (tradesHook ? tradesHook.trades : trades).map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
-                  if (!tradesHook) {
-                    setTrades(updated)
-                    try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
-                  }
-                  if (selectedAccounts.includes(oldName)) setSelectedAccounts(prev => prev.map(x => x === oldName ? newName : x))
-                }}
-              />
-            ))}
+            {accounts.map((a: string) => {
+              const tc = (tradesHook ? tradesHook.trades : trades).filter((t: Trade) => t.account === a).length
+              return (
+                <AccountRow key={a} account={a} tradeCount={tc}
+                  onRename={(oldName: string, newName: string) => {
+                    const src = tradesHook ? tradesHook.trades : trades
+                    const updated = src.map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
+                    if (!tradesHook) {
+                      setTrades(updated)
+                      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                    } else {
+                      // Aggiorna stato locale del hook
+                      tradesHook.renameTrades && tradesHook.renameTrades(oldName, newName)
+                    }
+                    if (selectedAccounts.includes(oldName)) setSelectedAccounts(prev => prev.map(x => x === oldName ? newName : x))
+                  }}
+                  onDelete={(accountName: string) => {
+                    if (!tradesHook) {
+                      const updated = trades.filter((t: Trade) => t.account !== accountName)
+                      setTrades(updated)
+                      try { sessionStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                    } else {
+                      tradesHook.deleteTrades && tradesHook.deleteTrades(accountName)
+                    }
+                    setSelectedAccounts(prev => prev.filter(x => x !== accountName))
+                  }}
+                />
+              )
+            })}
           </div>
           <div style={{marginTop:12,paddingTop:10,borderTop:'1px solid var(--border)',fontSize:11,color:'var(--text-2)'}}>
             💡 Puoi collegare un conto a Sync senza caricare storico — vai nella tab 🔌 Sync e inserisci il nome del conto.

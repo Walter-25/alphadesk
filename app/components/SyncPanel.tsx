@@ -19,11 +19,13 @@ const BROKERS = [
 
 export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPanelProps) {
   const [selectedAccount, setSelectedAccount] = useState(accounts[0] || '')
+  const [newAccountName, setNewAccountName] = useState('')
+  const [showAddAccount, setShowAddAccount] = useState(false)
   const [selectedBroker, setSelectedBroker] = useState('ninjatrader')
   const [syncing, setSyncing] = useState(false)
   const [result, setResult] = useState<any>(null)
   const [showConfig, setShowConfig] = useState(false)
-  const [config, setConfig] = useState({ url: 'http://localhost:36973', flexToken: '', queryId: '', accessToken: '' })
+  const [config, setConfig] = useState({ url: 'http://localhost:36973', flexToken: '', queryId: '', accessToken: '', tvUser: '', tvPass: '' })
 
   const handleSync = async () => {
     if (!selectedAccount) return
@@ -80,7 +82,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
             <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>Conto da sincronizzare</div>
             <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
               style={{ ...inp, marginBottom: 8 }}>
-              {accounts.map(a => <option key={a} value={a}>{a}</option>)}
+              {[...new Set([...accounts, ...(selectedAccount && !accounts.includes(selectedAccount) ? [selectedAccount] : [])])].map(a => <option key={a} value={a}>{a}</option>)}
             </select>
             {selectedAccount && getSyncInfo(selectedAccount) && (
               <div style={{ fontSize: 11, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>
@@ -121,9 +123,22 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
                   </>
                 )}
                 {selectedBroker === 'tradovate' && (
-                  <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Access Token Tradovate</div>
-                    <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="Bearer token API" />
+                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Username Tradovate</div>
+                      <input style={inp} value={config.tvUser || ''} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="La tua email Tradovate" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Password Tradovate</div>
+                      <input style={{...inp, fontFamily:'monospace'}} type="password" value={config.tvPass || ''} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="Password account" />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>API Key (opzionale)</div>
+                      <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="App ID da developer.tradovate.com" />
+                    </div>
+                    <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'6px 8px',background:'var(--bg-2)',borderRadius:5}}>
+                      Tradovate API: accedi su <strong>trader.tradovate.com</strong> → Account → API Access → genera credenziali. Per Lucid Trading, usa le stesse credenziali del portale Lucid.
+                    </div>
                   </div>
                 )}
               </div>
