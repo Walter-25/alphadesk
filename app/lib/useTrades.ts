@@ -46,26 +46,75 @@ export function useTrades(userId: string) {
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      // Trades
-      const { data: tradesData } = await supabase
+      // Leggi prima da localStorage come base
+      let localTrades: Trade[] = []
+      let localPerf: Record<string, PerfReport> = {}
+      try {
+        const ls = localStorage.getItem('alphadesk_trades')
+        if (ls) localTrades = JSON.parse(ls)
+        const lp = localStorage.getItem('alphadesk_perf')
+        if (lp) localPerf = JSON.parse(lp)
+      } catch {}
+
+      // Carica da Supabase
+      const { data: tradesData, error: tradesError } = await supabase
         .from('trades').select('*').eq('user_id', userId)
         .order('entry_time', { ascending: false })
-      if (tradesData) setTrades(tradesData)
+
+      if (!tradesError && tradesData && tradesData.length > 0) {
+        // Supabase ha dati — merge con locale (locale può avere tag emotivi più aggiornati)
+        const cloudMap = new Map(tradesData.map((t: any) => [t.ninja_id || t.id, t]))
+        const localMap = new Map(localTrades.map((t: Trade) => [t.ninja_id || t.id, t]))
+        // Unisce: cloud come base, locale sovrascrive se ha più dati emotivi
+        const merged = tradesData.map((t: any) => {
+          const local = localMap.get(t.ninja_id || t.id)
+          if (local && (local.emotion_tags?.length || local.notes || local.rule_followed !== undefined)) {
+            return { ...t, emotion_tags: local.emotion_tags, notes: local.notes,
+              rule_followed: local.rule_followed, setup_quality: local.setup_quality }
+          }
+          return t
+        })
+        // Aggiungi trade locali non ancora su cloud
+        localTrades.forEach((t: Trade) => {
+          if (!cloudMap.has(t.ninja_id || t.id)) merged.push(t)
+        })
+        setTrades(merged)
+        // Aggiorna localStorage con dati merged
+        try { localStorage.setItem('alphadesk_trades', JSON.stringify(merged)) } catch {}
+      } else if (localTrades.length > 0) {
+        // Supabase vuoto o errore — usa locale
+        setTrades(localTrades)
+      }
+      // Se nessun dato né locale né cloud, rimane array vuoto
 
       // Perf reports
       const { data: perfData } = await supabase
         .from('perf_reports').select('*').eq('user_id', userId)
-      if (perfData) {
+      if (perfData && perfData.length > 0) {
         const map: Record<string, PerfReport> = {}
         perfData.forEach((r: any) => { map[r.account] = r.stats })
-        setPerfReports(map)
+        // Merge con perf locali
+        setPerfReports({ ...localPerf, ...map })
+        try { localStorage.setItem('alphadesk_perf', JSON.stringify({ ...localPerf, ...map })) } catch {}
+      } else if (Object.keys(localPerf).length > 0) {
+        setPerfReports(localPerf)
       }
 
       // Syncs
       const { data: syncData } = await supabase
         .from('account_syncs').select('*').eq('user_id', userId)
       if (syncData) setSyncs(syncData)
-    } catch (e: any) { setError(e.message) }
+
+    } catch (e: any) {
+      setError(e.message)
+      // In caso di errore totale Supabase, carica da locale
+      try {
+        const ls = localStorage.getItem('alphadesk_trades')
+        if (ls) setTrades(JSON.parse(ls))
+        const lp = localStorage.getItem('alphadesk_perf')
+        if (lp) setPerfReports(JSON.parse(lp))
+      } catch {}
+    }
     setLoading(false)
   }, [userId])
 

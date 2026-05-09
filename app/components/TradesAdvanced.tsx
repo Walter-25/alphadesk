@@ -923,12 +923,11 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     if (!tradesHook) setTrades(localUpdated)
 
     if (tradesHook) {
-      // Tenta salvataggio cloud in background
       const result = await tradesHook.saveTrades(merged, accountName.trim())
       if (result?.success && !result?.local) {
-        setImportMsg(`✓ ${merged.length} trade salvati in cloud per "${accountName.trim()}" — disponibili ad ogni accesso`)
+        setImportMsg(`✓ ${merged.length} trade salvati in cloud per "${accountName.trim()}" · Conto creato automaticamente · Disponibili ad ogni accesso`)
       } else {
-        setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}" — salvati localmente`)
+        setImportMsg(`✓ ${merged.length} trade caricati localmente per "${accountName.trim()}" · Resteranno disponibili in questa sessione`)
       }
     } else {
       setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}"`)
@@ -961,6 +960,9 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
               New → Trade Performance → seleziona conto e periodo<br/>
               → scheda <strong>"Trades"</strong> → tasto destro → <strong>Export → CSV</strong><br/>
               <span style={{color:'var(--amber)'}}>⚠ Non usare "Performance" (Summary) — serve la lista trade singoli</span>
+            </div>
+            <div style={{marginTop:8,fontSize:11,color:'var(--text-2)',padding:'6px 10px',background:'var(--bg-2)',borderRadius:6}}>
+              💡 Con <strong>AlphaDesk Bridge</strong> (Sync → NinjaTrader) il nome conto viene letto automaticamente da NT8 — non serve importare il CSV.
             </div>
           </div>
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
