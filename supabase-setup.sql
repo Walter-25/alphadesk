@@ -54,3 +54,6 @@ CREATE POLICY "api_keys_policy" ON public.api_keys FOR ALL USING (true);
 
 -- Campo extra per dati aggiuntivi CoreTrader (MAE ticks, MFE ticks, efficiency, ecc.)
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS extra JSONB;
+
+-- Aggiunge colonna per chiave CoreTraders (per il forwarding automatico)
+ALTER TABLE public.api_keys ADD COLUMN IF NOT EXISTS coretraders_key TEXT;

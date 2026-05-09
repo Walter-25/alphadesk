@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-interface ApiKey { id: string; key: string; label: string; created_at: string }
+interface ApiKey { id: string; key: string; label: string; created_at: string; coretraders_key?: string }
 
 export default function CoreTraderSetup({ userId }: { userId: string }) {
   const [keys, setKeys] = useState<ApiKey[]>([])
