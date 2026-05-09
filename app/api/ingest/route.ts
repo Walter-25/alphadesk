@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
         ninja_id: `ct-${account}-${t.trade_number || Date.now()}`,
         user_id: userId,
         account,
-        source: 'coretrader_realtime',
+        source: (body.source === 'AlphaDeskBridge' ? 'alphadesk_bridge' : 'coretrader_realtime'),
         instrument: t.instrument_base || t.instrument || 'N/A',
         direction: (t.market_position || '').toLowerCase() === 'short' ? 'Short' : 'Long',
         entry_time: entryTime,

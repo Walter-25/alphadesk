@@ -52,10 +52,10 @@ export default function CoreTraderSetup({ userId }: { userId: string }) {
       {/* Intestazione */}
       <div style={{ background: 'var(--bg-2)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 12, padding: 18 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)', marginBottom: 6 }}>
-          🔌 CoreTraderExporter → AlphaDesk (Real-time)
+          ⚡ AlphaDesk Bridge — NinjaTrader 8 (Real-time)
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
-          Hai già installato il plugin CoreTraderExporter su NinjaTrader. Configura il plugin per inviare i trade direttamente ad AlphaDesk in tempo reale — ogni trade viene registrato automaticamente appena chiudi la posizione su NT8.
+          Plugin proprietario AlphaDesk per NinjaTrader 8. Ogni trade chiuso su NT8 viene inviato automaticamente ad AlphaDesk in tempo reale — senza export manuale, senza altri software.
         </div>
       </div>
 
@@ -115,7 +115,7 @@ export default function CoreTraderSetup({ userId }: { userId: string }) {
 
       {/* Config file esempio */}
       <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Step 3 — Config file NinjaTrader</div>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Step 3 — Configura AlphaDesk Bridge in NT8</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10, lineHeight: 1.6 }}>
           Apri il file <code style={{ background: 'var(--bg-3)', padding: '1px 5px', borderRadius: 3 }}>Documenti\NinjaTrader 8\CoreTraderExporter.config.json</code> e aggiorna così:
         </div>
