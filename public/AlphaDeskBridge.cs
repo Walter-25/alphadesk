@@ -422,30 +422,17 @@ namespace NinjaTrader.NinjaScript.AddOns
         {
             try
             {
-                // NT8 ha più finestre — aggiungi la voce solo alla Control Center (finestra principale)
-                // Identificata dal tipo o dal titolo
-                string title = window.Title ?? "";
-                bool isMain = title.Contains("NinjaTrader") || window.GetType().Name.Contains("MainWindow");
-                if (!isMain) return;
-
-                // Cerca il Menu nell'albero visuale
+                // Cerca il menu principale di NT8 nell'albero visuale
                 var menu = FindVisualChild<Menu>(window);
-                if (menu != null)
-                {
-                    // Aggiungi solo se non già presente
-                    foreach (var item2 in menu.Items)
-                        if (item2 is MenuItem mi && mi.Header?.ToString() == "AlphaDesk Bridge") return;
+                if (menu == null) return;
 
-                    var item = new MenuItem { Header = "AlphaDesk Bridge" };
-                    item.Click += (s, e) => ShowWindow();
-                    menu.Items.Add(item);
-                }
-                else
-                {
-                    // Fallback: aggiungi un pulsante nella barra del titolo
-                    // NT8 non espone sempre il menu — apri la finestra all'avvio
-                    window.Loaded += (s, e) => ShowWindow();
-                }
+                // Evita duplicati
+                foreach (object existing in menu.Items)
+                    if (existing is MenuItem mi && mi.Header?.ToString() == "AlphaDesk Bridge") return;
+
+                var item = new MenuItem { Header = "AlphaDesk Bridge" };
+                item.Click += (s, e) => ShowWindow();
+                menu.Items.Add(item);
             }
             catch { }
         }
