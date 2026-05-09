@@ -860,12 +860,8 @@ function AccountRow({ account, onRename, onDelete, tradeCount }: {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 export default function TradesAdvanced({ userId, tradesHook }: { userId: string; tradesHook?: any }) {
-  const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>(() => {
-    try { const s = localStorage.getItem('alphadesk_perf'); return s ? JSON.parse(s) : {} } catch { return {} }
-  })
-  const [trades, setTrades] = useState<Trade[]>(() => {
-    try { const s = localStorage.getItem('alphadesk_trades'); return s ? JSON.parse(s) : [] } catch { return [] }
-  })
+  const [perfStats, setPerfStats] = useState<Record<string,PerfReport>>({})  // inizializza vuoto
+  const [trades, setTrades] = useState<Trade[]>([])  // inizializza vuoto, carica in useEffect
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const [tab, setTab] = useState<'stats'|'calendar'|'list'|'emotion'|'sync'>('stats')
   const [importing, setImporting] = useState(false)
@@ -879,6 +875,18 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const allPerfStats = tradesHook ? tradesHook.perfReports : perfStats
   const allTrades = tradesHook ? tradesHook.trades : trades
   const accounts = tradesHook ? tradesHook.accounts : [...new Set([...Object.keys(perfStats), ...trades.map(t=>t.account)])]
+
+  // Carica dati locali specifici per questo utente all'avvio
+  useEffect(() => {
+    if (!userId) return
+    const key = userId || 'guest'
+    try {
+      const lt = localStorage.getItem('ad_trades_' + key)
+      if (lt) setTrades(JSON.parse(lt))
+      const lp = localStorage.getItem('ad_perf_' + key)
+      if (lp) setPerfStats(JSON.parse(lp))
+    } catch {}
+  }, [userId])
 
   useEffect(() => { if (accounts.length>0&&selectedAccounts.length===0) setSelectedAccounts([accounts[0]]) }, [accounts])
 
@@ -919,7 +927,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     })
     // Salva SEMPRE su localStorage come backup immediato
     const localUpdated = [...(tradesHook ? tradesHook.trades : trades).filter((t:Trade)=>t.account!==accountName.trim()),...merged]
-    try { localStorage.setItem('alphadesk_trades', JSON.stringify(localUpdated)) } catch {}
+    lsSave('trades', localUpdated)
     if (!tradesHook) setTrades(localUpdated)
 
     if (tradesHook) {
@@ -936,6 +944,10 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     setImporting(false)
     if (fileRef.current) fileRef.current.value=''
   }, [accountName, fileType, allTrades, tradesHook])
+
+  const lsKey = (type: string) => 'ad_' + type + '_' + (userId || 'guest')
+  const lsSave = (type: string, data: any) => { try { localStorage.setItem(lsKey(type), JSON.stringify(data)) } catch {} }
+  const lsClear = (type: string) => { try { localStorage.removeItem(lsKey(type)) } catch {} }
 
   const inp = {padding:'8px 12px',background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,color:'var(--text-0)',fontSize:13,outline:'none',fontFamily:'var(--font-body)'} as React.CSSProperties
   const toggleAccount = (a: string) => setSelectedAccounts(prev => prev.includes(a)?prev.filter(x=>x!==a):[...prev,a])
@@ -989,7 +1001,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                     const updated = src.map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
                     if (!tradesHook) {
                       setTrades(updated)
-                      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                      lsSave('trades', updated)
                     } else {
                       // Aggiorna stato locale del hook
                       tradesHook.renameTrades && tradesHook.renameTrades(oldName, newName)
@@ -1000,7 +1012,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                     if (!tradesHook) {
                       const updated = trades.filter((t: Trade) => t.account !== accountName)
                       setTrades(updated)
-                      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
+                      lsSave('trades', updated)
                     } else {
                       tradesHook.deleteTrades && tradesHook.deleteTrades(accountName)
                     }

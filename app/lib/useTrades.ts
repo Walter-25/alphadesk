@@ -50,9 +50,9 @@ export function useTrades(userId: string) {
       let localTrades: Trade[] = []
       let localPerf: Record<string, PerfReport> = {}
       try {
-        const ls = localStorage.getItem('alphadesk_trades')
+        const ls = localStorage.getItem('ad_trades_' + userId)
         if (ls) localTrades = JSON.parse(ls)
-        const lp = localStorage.getItem('alphadesk_perf')
+        const lp = localStorage.getItem('ad_perf_' + userId)
         if (lp) localPerf = JSON.parse(lp)
       } catch {}
 
@@ -80,7 +80,7 @@ export function useTrades(userId: string) {
         })
         setTrades(merged)
         // Aggiorna localStorage con dati merged
-        try { localStorage.setItem('alphadesk_trades', JSON.stringify(merged)) } catch {}
+        try { localStorage.setItem('ad_trades_' + userId, JSON.stringify(merged)) } catch {}
       } else if (localTrades.length > 0) {
         // Supabase vuoto o errore — usa locale
         setTrades(localTrades)
@@ -95,7 +95,7 @@ export function useTrades(userId: string) {
         perfData.forEach((r: any) => { map[r.account] = r.stats })
         // Merge con perf locali
         setPerfReports({ ...localPerf, ...map })
-        try { localStorage.setItem('alphadesk_perf', JSON.stringify({ ...localPerf, ...map })) } catch {}
+        try { localStorage.setItem('ad_perf_' + userId, JSON.stringify({ ...localPerf, ...map })) } catch {}
       } else if (Object.keys(localPerf).length > 0) {
         setPerfReports(localPerf)
       }
@@ -109,9 +109,9 @@ export function useTrades(userId: string) {
       setError(e.message)
       // In caso di errore totale Supabase, carica da locale
       try {
-        const ls = localStorage.getItem('alphadesk_trades')
+        const ls = localStorage.getItem('ad_trades_' + userId)
         if (ls) setTrades(JSON.parse(ls))
-        const lp = localStorage.getItem('alphadesk_perf')
+        const lp = localStorage.getItem('ad_perf_' + userId)
         if (lp) setPerfReports(JSON.parse(lp))
       } catch {}
     }
@@ -158,20 +158,35 @@ export function useTrades(userId: string) {
 
   // Rinomina account localmente
   const renameTrades = useCallback((oldName: string, newName: string) => {
-    setTrades(prev => prev.map(t => t.account === oldName ? {...t, account: newName} : t))
+    setTrades(prev => {
+      const updated = prev.map(t => t.account === oldName ? {...t, account: newName} : t)
+      try { localStorage.setItem('ad_trades_' + userId, JSON.stringify(updated)) } catch {}
+      return updated
+    })
     setPerfReports(prev => {
       if (!prev[oldName]) return prev
       const next = {...prev}
       next[newName] = next[oldName]
       delete next[oldName]
+      try { localStorage.setItem('ad_perf_' + userId, JSON.stringify(next)) } catch {}
       return next
     })
-  }, [])
+  }, [userId])
 
   // Elimina tutti i trade di un account
   const deleteTrades = useCallback(async (account: string) => {
-    setTrades(prev => prev.filter(t => t.account !== account))
-    setPerfReports(prev => { const next = {...prev}; delete next[account]; return next })
+    setTrades(prev => {
+      const updated = prev.filter(t => t.account !== account)
+      // Aggiorna localStorage utente-specifico
+      try { localStorage.setItem('ad_trades_' + userId, JSON.stringify(updated)) } catch {}
+      return updated
+    })
+    setPerfReports(prev => {
+      const next = {...prev}
+      delete next[account]
+      try { localStorage.setItem('ad_perf_' + userId, JSON.stringify(next)) } catch {}
+      return next
+    })
     // Elimina da Supabase
     try {
       const { supabase: sb } = await import('./supabase')
