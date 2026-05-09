@@ -422,12 +422,30 @@ namespace NinjaTrader.NinjaScript.AddOns
         {
             try
             {
-                // Aggiunge voce al menu della finestra principale NT8
+                // NT8 ha più finestre — aggiungi la voce solo alla Control Center (finestra principale)
+                // Identificata dal tipo o dal titolo
+                string title = window.Title ?? "";
+                bool isMain = title.Contains("NinjaTrader") || window.GetType().Name.Contains("MainWindow");
+                if (!isMain) return;
+
+                // Cerca il Menu nell'albero visuale
                 var menu = FindVisualChild<Menu>(window);
-                if (menu == null) return;
-                var item = new MenuItem { Header = "AlphaDesk Bridge" };
-                item.Click += (s, e) => ShowWindow();
-                menu.Items.Add(item);
+                if (menu != null)
+                {
+                    // Aggiungi solo se non già presente
+                    foreach (var item2 in menu.Items)
+                        if (item2 is MenuItem mi && mi.Header?.ToString() == "AlphaDesk Bridge") return;
+
+                    var item = new MenuItem { Header = "AlphaDesk Bridge" };
+                    item.Click += (s, e) => ShowWindow();
+                    menu.Items.Add(item);
+                }
+                else
+                {
+                    // Fallback: aggiungi un pulsante nella barra del titolo
+                    // NT8 non espone sempre il menu — apri la finestra all'avvio
+                    window.Loaded += (s, e) => ShowWindow();
+                }
             }
             catch { }
         }
@@ -590,9 +608,22 @@ namespace NinjaTrader.NinjaScript.AddOns
             tbUrl = Inp(b.Endpoint); Add(root, tbUrl);
 
             Add(root, Lbl("API Key  (generala su AlphaDesk → Eseguiti → Sync → NinjaTrader → Step 3)"));
-            tbKey = Inp(b.ApiKeyVal); Add(root, tbKey);
+            tbKey = Inp(b.ApiKeyVal);
+            tbKey.IsReadOnly = false;
+            // Mostra versione mascherata nell'input (gli ultimi 6 char visibili)
+            if (b.ApiKeyVal != null && b.ApiKeyVal.Length > 6 && b.ApiKeyVal != "INCOLLA_LA_TUA_CHIAVE_API")
+            {
+                tbKey.Text = new string('•', b.ApiKeyVal.Length - 6) + b.ApiKeyVal.Substring(b.ApiKeyVal.Length - 6);
+                tbKey.GotFocus += (s, e) => { if (tbKey.Text.Contains('•')) tbKey.Text = b.ApiKeyVal; };
+                tbKey.LostFocus += (s, e) => {
+                    string val = tbKey.Text;
+                    if (!val.Contains('•') && val.Length > 6)
+                        tbKey.Text = new string('•', val.Length - 6) + val.Substring(val.Length - 6);
+                };
+            }
+            Add(root, tbKey);
 
-            Add(root, Lbl("Nome conto in AlphaDesk (es: LFE05067595930005=LucidProp  oppure  Sim101=Demo)"));
+            Add(root, Lbl("Nome conto in AlphaDesk — separa più conti con la virgola\nEs: LFE05067595930005=LucidProp, Sim101=Demo, ALTRO=NomeScelto"));
             var aliasList2 = new System.Collections.Generic.List<string>();
             foreach (var kv in bridge.AliasMap) aliasList2.Add(kv.Key + "=" + kv.Value);
             tbAlias = Inp(string.Join(",", aliasList2));
@@ -617,6 +648,11 @@ namespace NinjaTrader.NinjaScript.AddOns
 
             Add(root, new TextBlock {
                 Text = "ℹ Lo stato 'Non verificato' dopo il riavvio di NT8 è normale. I trade vengono inviati automaticamente — il Test serve solo per confermare la connessione.",
+                FontSize = 11, Foreground = t2, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 16)
+            });
+            Add(root, new TextBlock {
+                Text = "ℹ Lo stato 'Non verificato' dopo il riavvio è normale. I trade vengono inviati automaticamente al primo trade chiuso.",
                 FontSize = 11, Foreground = t2, TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 16)
             });

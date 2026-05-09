@@ -108,11 +108,17 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
                   <div style={{ fontSize: 10, color: 'var(--text-2)' }}>creata il {new Date(k.created_at).toLocaleDateString('it-IT')}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input readOnly value={k.key} style={{ ...inp, flex: 1 }} />
-                  <button onClick={() => copy(k.key, k.id)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: copied === k.id ? 'var(--green-dim)' : 'var(--bg-2)', color: copied === k.id ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 11 }}>
-                    {copied === k.id ? '✓' : '📋'}
+                  <input readOnly
+                    value={copied === k.id ? k.key : k.key.substring(0, 8) + '••••••••••••••••' + k.key.slice(-4)}
+                    style={{ ...inp, flex: 1, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }} />
+                  <button onClick={() => copy(k.key, k.id)} title="Copia chiave completa"
+                    style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: copied === k.id ? 'var(--green-dim)' : 'var(--bg-2)', color: copied === k.id ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' }}>
+                    {copied === k.id ? '✓ Copiato' : '📋 Copia'}
                   </button>
                   <button onClick={() => deleteKey(k.id)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>🗑</button>
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>
+                  La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla
                 </div>
               </div>
             ))}
@@ -147,6 +153,15 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </pre>
         <div style={{ fontSize: 11, color: 'var(--amber)' }}>
           ⚠ File: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>Documenti\NinjaTrader 8\AlphaDeskBridge.config.json</code>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.6, padding: '8px 10px', background: 'var(--bg-3)', borderRadius: 6 }}>
+          <strong style={{ color: 'var(--text-0)' }}>Più conti con nomi diversi?</strong><br />
+          Nella finestra AlphaDesk Bridge in NT8 trovi il campo <em>"Nome conto in AlphaDesk"</em>.<br />
+          Scrivi i mapping separati da <strong>virgola</strong>:<br />
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10, background: 'var(--bg-2)', padding: '2px 6px', borderRadius: 3 }}>
+            LFE05067595930005=LucidProp, Sim101=Demo, ALTRO123=LiveConto
+          </code><br />
+          Il numero del conto NT8 non viene mai mostrato su AlphaDesk — viene sostituito dal nome scelto.
         </div>
       </div>
 
