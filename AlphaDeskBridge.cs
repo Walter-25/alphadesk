@@ -1,5 +1,9 @@
+// AlphaDesk Bridge v1.1 — NinjaTrader 8 Add-On
+// Copia in: Documenti\NinjaTrader 8\bin\Custom\AddOns\
+// Compila con F5 nel NinjaScript Editor, poi riavvia NT8.
+// In NT8 trovi "AlphaDesk Bridge" nel menu Strumenti.
+
 #region Using declarations
-using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,30 +18,16 @@ using NinjaTrader.Cbi;
 using NinjaTrader.NinjaScript;
 #endregion
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  AlphaDesk Bridge — NinjaTrader 8 Add-On
-//  Invia ogni trade chiuso ad AlphaDesk in tempo reale via REST API
-//
-//  Installazione:
-//  1. Copia questo file in: Documenti\NinjaTrader 8\bin\Custom\AddOns\
-//  2. In NT8: New → NinjaScript Editor → Compile (F5)
-//  3. Riavvia NinjaTrader 8
-//  4. Vai in AlphaDesk → Eseguiti → Sync → NinjaTrader → copia URL e API key
-//  5. Inserisci URL e API key nel pannello AlphaDesk Bridge (si apre in NT8)
-// ─────────────────────────────────────────────────────────────────────────────
-
 namespace NinjaTrader.NinjaScript.AddOns
 {
     public class AlphaDeskBridge : AddOnBase
     {
-        // ── Configurazione ──────────────────────────────────────────────────
         private string apiEndpoint   = "";
         private string apiKey        = "";
         private bool   sendSimulated = true;
         private bool   debugMode     = false;
         private int    maxRetries    = 3;
 
-        // ── Stato ───────────────────────────────────────────────────────────
         private bool   isConfigured  = false;
         private bool   isConnected   = false;
         private string lastError     = "";
@@ -45,26 +35,17 @@ namespace NinjaTrader.NinjaScript.AddOns
         private int    tradesFailed  = 0;
         private DateTime? lastTradeSent;
 
-        // ── Percorsi file ───────────────────────────────────────────────────
         private string configPath = "";
         private string logPath    = "";
 
-        // ── Sync ────────────────────────────────────────────────────────────
-        private Queue<string>           failedQueue    = new Queue<string>();
-        private object                  lockObj        = new object();
-        private HashSet<string>         sentIds        = new HashSet<string>();
-        private Dictionary<string,int>  tradeCounters  = new Dictionary<string,int>();
-        private System.Threading.Timer  retryTimer;
+        private Queue<string>          failedQueue   = new Queue<string>();
+        private object                 lockObj       = new object();
+        private HashSet<string>        sentIds       = new HashSet<string>();
+        private Dictionary<string,int> tradeCounters = new Dictionary<string,int>();
+        private System.Threading.Timer retryTimer;
 
-        // ── UI ──────────────────────────────────────────────────────────────
         private AlphaDeskWindow statusWindow;
-        private TextBlock       tbStatus, tbTrades, tbFailed, tbLast, tbError;
 
-        // ── Versione ────────────────────────────────────────────────────────
-        private string ntVersion = "";
-        private string machineId = "";
-
-        // ═══════════════════════════════════════════════════════════════════
         protected override void OnStateChange()
         {
             if (State == State.SetDefaults)
@@ -74,16 +55,12 @@ namespace NinjaTrader.NinjaScript.AddOns
             }
             else if (State == State.Active)
             {
-                string ntFolder = Path.Combine(
+                string ntFolder = System.IO.Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
                     "NinjaTrader 8"
                 );
-                configPath = Path.Combine(ntFolder, "AlphaDeskBridge.config.json");
-                logPath    = Path.Combine(ntFolder, "AlphaDeskBridge.log");
-
-                ntVersion = Assembly.GetAssembly(typeof(NinjaTrader.NinjaScript.AddOnBase))
-                                    ?.GetName().Version?.ToString() ?? "N/A";
-                machineId = Environment.MachineName;
+                configPath = System.IO.Path.Combine(ntFolder, "AlphaDeskBridge.config.json");
+                logPath    = System.IO.Path.Combine(ntFolder, "AlphaDeskBridge.log");
 
                 LoadConfig();
                 if (isConfigured) SubscribeToAccounts();
@@ -91,7 +68,8 @@ namespace NinjaTrader.NinjaScript.AddOns
                 retryTimer = new System.Threading.Timer(RetryFailed, null,
                     TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-                Log("AlphaDesk Bridge avviato. Endpoint: " + (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
+                Log("AlphaDesk Bridge avviato. Endpoint: " +
+                    (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
             }
             else if (State == State.Terminated)
             {
@@ -100,16 +78,14 @@ namespace NinjaTrader.NinjaScript.AddOns
             }
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  CONFIGURAZIONE
-        // ═══════════════════════════════════════════════════════════════════
+        // ── Configurazione ──────────────────────────────────────────────────
         private void LoadConfig()
         {
             if (!File.Exists(configPath))
             {
                 WriteDefaultConfig();
                 isConfigured = false;
-                lastError = "Config non trovata — inserisci URL e API key nel pannello AlphaDesk Bridge";
+                lastError = "Inserisci URL e API key nel pannello AlphaDesk Bridge (menu Strumenti di NT8)";
                 return;
             }
             try
@@ -124,60 +100,80 @@ namespace NinjaTrader.NinjaScript.AddOns
                 isConfigured = !string.IsNullOrWhiteSpace(apiEndpoint) &&
                                !string.IsNullOrWhiteSpace(apiKey) &&
                                apiKey != "INCOLLA_LA_TUA_CHIAVE_API";
-                if (!isConfigured) lastError = "Endpoint o ApiKey mancanti";
+
+                if (!isConfigured) lastError = "Endpoint o ApiKey mancanti nel file di configurazione";
+                else lastError = "";
             }
             catch (Exception ex) { lastError = ex.Message; isConfigured = false; }
         }
 
         private void SaveConfig()
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("{");
-            sb.AppendLine("  \"Endpoint\": \"" + apiEndpoint + "\",");
-            sb.AppendLine("  \"ApiKey\": \"" + apiKey + "\",");
-            sb.AppendLine("  \"SendSimulated\": " + sendSimulated.ToString().ToLower() + ",");
-            sb.AppendLine("  \"Debug\": " + debugMode.ToString().ToLower() + ",");
-            sb.AppendLine("  \"MaxRetries\": " + maxRetries);
-            sb.AppendLine("}");
-            File.WriteAllText(configPath, sb.ToString(), Encoding.UTF8);
+            try
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"Endpoint\": \"" + apiEndpoint + "\",");
+                sb.AppendLine("  \"ApiKey\": \"" + apiKey + "\",");
+                sb.AppendLine("  \"SendSimulated\": " + sendSimulated.ToString().ToLower() + ",");
+                sb.AppendLine("  \"Debug\": " + debugMode.ToString().ToLower() + ",");
+                sb.AppendLine("  \"MaxRetries\": " + maxRetries);
+                sb.AppendLine("}");
+                File.WriteAllText(configPath, sb.ToString(), Encoding.UTF8);
+            }
+            catch (Exception ex) { Log("Errore salvataggio config: " + ex.Message); }
         }
 
         private void WriteDefaultConfig()
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("{");
-            sb.AppendLine("  \"Endpoint\": \"https://alphadesk-ecru.vercel.app/api/ingest\",");
-            sb.AppendLine("  \"ApiKey\": \"INCOLLA_LA_TUA_CHIAVE_API\",");
-            sb.AppendLine("  \"SendSimulated\": true,");
-            sb.AppendLine("  \"Debug\": false,");
-            sb.AppendLine("  \"MaxRetries\": 3");
-            sb.AppendLine("}");
-            File.WriteAllText(configPath, sb.ToString(), Encoding.UTF8);
+            try
+            {
+                var sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine("  \"Endpoint\": \"https://alphadesk-ecru.vercel.app/api/ingest\",");
+                sb.AppendLine("  \"ApiKey\": \"INCOLLA_LA_TUA_CHIAVE_API\",");
+                sb.AppendLine("  \"SendSimulated\": true,");
+                sb.AppendLine("  \"Debug\": false,");
+                sb.AppendLine("  \"MaxRetries\": 3");
+                sb.AppendLine("}");
+                File.WriteAllText(configPath, sb.ToString(), Encoding.UTF8);
+            }
+            catch { }
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  GESTIONE ACCOUNT / TRADE
-        // ═══════════════════════════════════════════════════════════════════
+        // ── Gestione account e trade ────────────────────────────────────────
         private void SubscribeToAccounts()
         {
-            foreach (var acc in Account.All)
-                acc.TradeCollection.TradeAdded += OnTradeAdded;
+            lock (lockObj)
+            {
+                foreach (Account acc in Account.All)
+                {
+                    acc.TradeCollection.TradeAdded += OnTradeAdded;
+                }
+            }
         }
 
         private void UnsubscribeFromAccounts()
         {
-            foreach (var acc in Account.All)
-                acc.TradeCollection.TradeAdded -= OnTradeAdded;
+            try
+            {
+                foreach (Account acc in Account.All)
+                {
+                    acc.TradeCollection.TradeAdded -= OnTradeAdded;
+                }
+            }
+            catch { }
         }
 
-        private void OnTradeAdded(object sender, TradeEventArgs e)
+        private void OnTradeAdded(object sender, TradeCollectionEventArgs e)
         {
             try
             {
                 if (!isConfigured) return;
-                var trade   = e.Trade;
-                var account = sender as Account;
-                if (account == null) return;
+
+                Trade   trade   = e.Trade;
+                Account account = sender as Account;
+                if (account == null || trade == null) return;
 
                 bool isSim = account.Connection.Options.Mode == Mode.Simulation;
                 if (!sendSimulated && isSim) return;
@@ -191,132 +187,137 @@ namespace NinjaTrader.NinjaScript.AddOns
                 {
                     if (sentIds.Contains(uid)) return;
                     sentIds.Add(uid);
-                    if (!tradeCounters.ContainsKey(account.Name)) tradeCounters[account.Name] = 0;
+                    if (!tradeCounters.ContainsKey(account.Name))
+                        tradeCounters[account.Name] = 0;
                     tradeCounters[account.Name]++;
                 }
 
-                var info = new PendingInfo { Trade = trade, Account = account,
-                    Num = tradeCounters[account.Name], IsSim = isSim };
+                var info = new PendingInfo
+                {
+                    Trade  = trade,
+                    Account = account,
+                    Num    = tradeCounters[account.Name],
+                    IsSim  = isSim
+                };
 
-                // Delay 1s per permettere a NT di completare i calcoli
+                // Delay 1s per permettere a NT8 di completare i calcoli
                 System.Threading.Timer t = null;
-                t = new System.Threading.Timer(s => {
-                    try { BuildAndSend((PendingInfo)s); }
-                    catch (Exception ex) { Log("Errore: " + ex.Message); }
+                t = new System.Threading.Timer(state =>
+                {
+                    try { BuildAndSend((PendingInfo)state); }
+                    catch (Exception ex) { Log("Errore BuildAndSend: " + ex.Message); }
                     finally { t?.Dispose(); }
                 }, info, 1000, Timeout.Infinite);
             }
-            catch (Exception ex) { Log("OnTradeAdded: " + ex.Message); }
+            catch (Exception ex) { Log("Errore OnTradeAdded: " + ex.Message); }
         }
 
         private void BuildAndSend(PendingInfo info)
         {
-            var trade   = info.Trade;
-            var account = info.Account;
-            var mi      = trade.Entry.Instrument.MasterInstrument;
+            Trade   trade   = info.Trade;
+            Account account = info.Account;
 
-            double pointValue = mi.PointValue;
-            double tickSize   = mi.TickSize;
-            double tickValue  = pointValue * tickSize;
-            double exitRate   = trade.Exit.Rate > 0 ? trade.Exit.Rate : 1;
+            MasterInstrument mi        = trade.Entry.Instrument.MasterInstrument;
+            double           pointValue = mi.PointValue;
+            double           tickSize   = mi.TickSize;
+            double           tickValue  = pointValue * tickSize;
+            double           exitRate   = trade.Exit.Rate > 0 ? trade.Exit.Rate : 1.0;
 
             double profitGross = trade.ProfitCurrency / exitRate;
             double maeAcc      = trade.MaeCurrency;
             double mfeAcc      = trade.MfeCurrency;
-            double etd         = mfeAcc > 0
-                ? (profitGross >= 0 ? mfeAcc - profitGross : mfeAcc + Math.Abs(profitGross))
-                : 0;
-            if (etd < 0) etd = 0;
+
+            double etd = 0;
+            if (mfeAcc > 0)
+            {
+                etd = profitGross >= 0
+                    ? mfeAcc - profitGross
+                    : mfeAcc + Math.Abs(profitGross);
+                if (etd < 0) etd = 0;
+            }
 
             var sb = new StringBuilder();
             sb.Append("{");
-            // Identificazione
-            A(sb, "trade_number",   info.Num);
-            A(sb, "account",        account.Name);
-            A(sb, "instrument",     trade.Entry.Instrument.FullName);
-            A(sb, "instrument_base",mi.Name);
-            A(sb, "market_position",trade.Entry.MarketPosition.ToString());
-            A(sb, "quantity",       trade.Quantity);
-            A(sb, "is_simulated",   info.IsSim);
-            // Prezzi
-            A(sb, "entry_price",    trade.Entry.Price);
-            A(sb, "exit_price",     trade.Exit.Price);
-            // Tempi
-            A(sb, "entry_time",     trade.Entry.Time.ToString("yyyy-MM-ddTHH:mm:ss"));
-            A(sb, "exit_time",      trade.Exit.Time.ToString("yyyy-MM-ddTHH:mm:ss"));
-            A(sb, "entry_name",     trade.Entry.Name ?? "");
-            A(sb, "exit_name",      trade.Exit.Name ?? "");
-            // P&L
-            A(sb, "profit_gross",   Math.Round(profitGross, 2));
-            A(sb, "profit_net",     Math.Round(profitGross - 0, 2)); // commissioni calcolate lato server
-            A(sb, "profit_ticks",   trade.ProfitTicks);
-            A(sb, "profit_points",  trade.ProfitPoints);
-            // MAE
-            A(sb, "mae_account_currency", Math.Round(maeAcc, 2));
-            A(sb, "mae_ticks",      trade.MaeTicks);
-            A(sb, "mae_points",     trade.MaePoints);
-            // MFE
-            A(sb, "mfe_account_currency", Math.Round(mfeAcc, 2));
-            A(sb, "mfe_ticks",      trade.MfeTicks);
-            A(sb, "mfe_points",     trade.MfePoints);
-            // ETD
-            A(sb, "etd_account_currency", Math.Round(etd, 2));
-            // Efficienza
-            A(sb, "entry_efficiency", Math.Round(trade.EntryEfficiency, 4));
-            A(sb, "exit_efficiency",  Math.Round(trade.ExitEfficiency, 4));
-            A(sb, "total_efficiency", Math.Round(trade.TotalEfficiency, 4));
-            // Strumento
-            A(sb, "point_value",    pointValue);
-            A(sb, "tick_size",      tickSize);
-            A(sb, "tick_value",     tickValue);
-            // Sistema
-            A(sb, "nt_version",     ntVersion);
-            A(sb, "machine_id",     machineId);
-            A(sb, "source",         "AlphaDeskBridge");
-            sb.Append("\"_v\":\"1.0\"}");
+            AppendStr(sb, "source",           "AlphaDeskBridge");
+            AppendNum(sb, "trade_number",     info.Num);
+            AppendStr(sb, "account",          account.Name);
+            AppendStr(sb, "instrument",       trade.Entry.Instrument.FullName);
+            AppendStr(sb, "instrument_base",  mi.Name);
+            AppendStr(sb, "market_position",  trade.Entry.MarketPosition.ToString());
+            AppendNum(sb, "quantity",         trade.Quantity);
+            AppendBool(sb,"is_simulated",     info.IsSim);
+            AppendNum(sb, "entry_price",      trade.Entry.Price);
+            AppendNum(sb, "exit_price",       trade.Exit.Price);
+            AppendStr(sb, "entry_time",       trade.Entry.Time.ToString("yyyy-MM-ddTHH:mm:ss"));
+            AppendStr(sb, "exit_time",        trade.Exit.Time.ToString("yyyy-MM-ddTHH:mm:ss"));
+            AppendStr(sb, "entry_name",       trade.Entry.Name ?? "");
+            AppendStr(sb, "exit_name",        trade.Exit.Name ?? "");
+            AppendNum(sb, "profit_gross",     Math.Round(profitGross, 2));
+            AppendNum(sb, "profit_net",       Math.Round(profitGross, 2));
+            AppendNum(sb, "profit_ticks",     trade.ProfitTicks);
+            AppendNum(sb, "profit_points",    trade.ProfitPoints);
+            AppendNum(sb, "mae_account_currency", Math.Round(maeAcc, 2));
+            AppendNum(sb, "mae_ticks",        trade.MaeTicks);
+            AppendNum(sb, "mfe_account_currency", Math.Round(mfeAcc, 2));
+            AppendNum(sb, "mfe_ticks",        trade.MfeTicks);
+            AppendNum(sb, "etd_account_currency", Math.Round(etd, 2));
+            AppendNum(sb, "entry_efficiency", Math.Round(trade.EntryEfficiency, 4));
+            AppendNum(sb, "exit_efficiency",  Math.Round(trade.ExitEfficiency, 4));
+            AppendNum(sb, "total_efficiency", Math.Round(trade.TotalEfficiency, 4));
+            AppendNum(sb, "point_value",      pointValue);
+            AppendNum(sb, "tick_size",        tickSize);
+            AppendNum(sb, "tick_value",       tickValue);
+            AppendStr(sb, "nt_version",       NinjaTrader.Core.Globals.NinjaTraderVersion.ToString());
+            // Rimuovi ultima virgola e chiudi
+            string json = sb.ToString().TrimEnd(',') + "}";
 
-            string json = sb.ToString().Replace(",\"_v\"", ",\"_v\"");
+            if (debugMode) Log("JSON: " + json);
             SendToAlphaDesk(json);
         }
 
-        // Helper per costruire JSON
-        private void A(StringBuilder sb, string k, object v)
+        private void AppendStr(StringBuilder sb, string key, string val)
         {
-            if (v is string s)  sb.Append("\"" + k + "\":\"" + s.Replace("\"","\\\"") + "\",");
-            else if (v is bool b)  sb.Append("\"" + k + "\":" + (b ? "true" : "false") + ",");
-            else sb.Append("\"" + k + "\":" + v + ",");
+            sb.Append("\"" + key + "\":\"" + (val ?? "").Replace("\"","\\\"") + "\",");
+        }
+        private void AppendNum(StringBuilder sb, string key, double val)
+        {
+            sb.Append("\"" + key + "\":" + val.ToString("G", System.Globalization.CultureInfo.InvariantCulture) + ",");
+        }
+        private void AppendBool(StringBuilder sb, string key, bool val)
+        {
+            sb.Append("\"" + key + "\":" + (val ? "true" : "false") + ",");
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  INVIO HTTP
-        // ═══════════════════════════════════════════════════════════════════
+        // ── Invio HTTP ──────────────────────────────────────────────────────
         private void SendToAlphaDesk(string json)
         {
             for (int attempt = 1; attempt <= maxRetries; attempt++)
             {
                 try
                 {
-                    var req = (HttpWebRequest)WebRequest.Create(apiEndpoint);
-                    req.Method      = "POST";
-                    req.ContentType = "application/json; charset=utf-8";
-                    req.Timeout     = 10000;
+                    byte[]         data = Encoding.UTF8.GetBytes(json);
+                    HttpWebRequest req  = (HttpWebRequest)WebRequest.Create(apiEndpoint);
+                    req.Method          = "POST";
+                    req.ContentType     = "application/json; charset=utf-8";
+                    req.ContentLength   = data.Length;
+                    req.Timeout         = 10000;
                     req.Headers.Add("X-API-Key", apiKey);
-                    req.Headers.Add("User-Agent", "AlphaDeskBridge/1.0");
+                    req.Headers.Add("User-Agent", "AlphaDeskBridge/1.1 NT8");
 
-                    byte[] data = Encoding.UTF8.GetBytes(json);
-                    req.ContentLength = data.Length;
-                    using (var s = req.GetRequestStream()) s.Write(data, 0, data.Length);
+                    using (Stream s = req.GetRequestStream())
+                        s.Write(data, 0, data.Length);
 
-                    using (var res = (HttpWebResponse)req.GetResponse())
+                    using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
                     {
-                        if (res.StatusCode == HttpStatusCode.OK || res.StatusCode == HttpStatusCode.Created)
+                        if (res.StatusCode == HttpStatusCode.OK ||
+                            res.StatusCode == HttpStatusCode.Created)
                         {
                             Interlocked.Increment(ref tradesSent);
                             lastTradeSent = DateTime.Now;
                             isConnected   = true;
                             lastError     = "";
                             UpdateUI();
-                            Log("Trade inviato con successo.");
+                            Log("Trade inviato con successo (tentativo " + attempt + ")");
                             return;
                         }
                     }
@@ -324,10 +325,13 @@ namespace NinjaTrader.NinjaScript.AddOns
                 catch (Exception ex)
                 {
                     lastError = ex.Message;
-                    if (attempt == maxRetries) Log("Invio fallito dopo " + maxRetries + " tentativi: " + ex.Message);
-                    else Thread.Sleep(1000 * attempt);
+                    if (attempt == maxRetries)
+                        Log("Invio fallito dopo " + maxRetries + " tentativi: " + ex.Message);
+                    else
+                        Thread.Sleep(1000 * attempt);
                 }
             }
+
             Interlocked.Increment(ref tradesFailed);
             isConnected = false;
             lock (lockObj) { failedQueue.Enqueue(json); }
@@ -347,22 +351,20 @@ namespace NinjaTrader.NinjaScript.AddOns
             SendToAlphaDesk(json);
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  TEST CONNESSIONE
-        // ═══════════════════════════════════════════════════════════════════
-        private bool TestConnection()
+        // ── Test connessione ────────────────────────────────────────────────
+        internal bool TestConnection()
         {
             if (!isConfigured) return false;
             try
             {
-                string testUrl = apiEndpoint + (apiEndpoint.Contains("?") ? "&ping=1" : "?ping=1");
-                var req = (HttpWebRequest)WebRequest.Create(testUrl);
+                string         testUrl = apiEndpoint + "?ping=1";
+                HttpWebRequest req     = (HttpWebRequest)WebRequest.Create(testUrl);
                 req.Method  = "GET";
                 req.Timeout = 8000;
                 req.Headers.Add("X-API-Key", apiKey);
-                using (var res = (HttpWebResponse)req.GetResponse())
+                using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
                 {
-                    isConnected = res.StatusCode == HttpStatusCode.OK;
+                    isConnected = (res.StatusCode == HttpStatusCode.OK);
                     lastError   = isConnected ? "" : "HTTP " + res.StatusCode;
                 }
             }
@@ -370,46 +372,64 @@ namespace NinjaTrader.NinjaScript.AddOns
             return isConnected;
         }
 
-        // ═══════════════════════════════════════════════════════════════════
-        //  UI — Pannello AlphaDesk Bridge (finestra NT8)
-        // ═══════════════════════════════════════════════════════════════════
+        // ── UI ──────────────────────────────────────────────────────────────
         protected override void OnWindowCreated(Window window)
         {
-            // Aggiunge voce nel menu Strumenti di NT8
-            var menu = window.FindName("menuStrip") as Menu;
-            if (menu == null) return;
-            var item = new MenuItem { Header = "AlphaDesk Bridge" };
-            item.Click += (s, e) => ShowWindow();
-            menu.Items.Add(item);
+            try
+            {
+                var menuStrip = FindMenu(window);
+                if (menuStrip == null) return;
+
+                var item = new MenuItem { Header = "AlphaDesk Bridge" };
+                item.Click += (s, e) => ShowWindow();
+                menuStrip.Items.Add(item);
+            }
+            catch { }
+        }
+
+        private Menu FindMenu(DependencyObject parent)
+        {
+            if (parent == null) return null;
+            if (parent is Menu m) return m;
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+                var result = FindMenu(child);
+                if (result != null) return result;
+            }
+            return null;
         }
 
         private void ShowWindow()
         {
             if (statusWindow != null && statusWindow.IsLoaded)
             { statusWindow.Activate(); return; }
-
             statusWindow = new AlphaDeskWindow(this);
             statusWindow.Show();
         }
 
         internal void UpdateUI()
         {
-            if (statusWindow == null || !statusWindow.IsLoaded) return;
-            Application.Current?.Dispatcher?.InvokeAsync(() => statusWindow.Refresh());
+            try
+            {
+                if (statusWindow == null || !statusWindow.IsLoaded) return;
+                Application.Current?.Dispatcher?.InvokeAsync(() => statusWindow.Refresh());
+            }
+            catch { }
         }
 
         // Getter per la finestra
-        internal string Endpoint    => apiEndpoint;
-        internal string ApiKey      => apiKey;
-        internal bool   SendSim     => sendSimulated;
-        internal bool   Debug       => debugMode;
-        internal bool   IsConn      => isConnected;
-        internal bool   IsConf      => isConfigured;
-        internal string LastErr     => lastError;
-        internal int    Sent        => tradesSent;
-        internal int    Failed      => tradesFailed;
-        internal int    Queued      { get { lock(lockObj) return failedQueue.Count; } }
-        internal DateTime? LastSent => lastTradeSent;
+        internal string  Endpoint    => apiEndpoint;
+        internal string  ApiKeyVal   => apiKey;
+        internal bool    SendSim     => sendSimulated;
+        internal bool    DbgMode     => debugMode;
+        internal bool    IsConn      => isConnected;
+        internal bool    IsConf      => isConfigured;
+        internal string  LastErr     => lastError;
+        internal int     Sent        => tradesSent;
+        internal int     Failed      => tradesFailed;
+        internal int     Queued      { get { lock(lockObj) return failedQueue.Count; } }
+        internal DateTime? LastSent  => lastTradeSent;
 
         internal void ApplySettings(string endpoint, string key, bool sim, bool dbg)
         {
@@ -417,7 +437,9 @@ namespace NinjaTrader.NinjaScript.AddOns
             apiKey        = key.Trim();
             sendSimulated = sim;
             debugMode     = dbg;
-            isConfigured  = !string.IsNullOrEmpty(apiEndpoint) && !string.IsNullOrEmpty(apiKey);
+            isConfigured  = !string.IsNullOrEmpty(apiEndpoint) &&
+                            !string.IsNullOrEmpty(apiKey) &&
+                            apiKey != "INCOLLA_LA_TUA_CHIAVE_API";
             SaveConfig();
             if (isConfigured)
             {
@@ -425,16 +447,18 @@ namespace NinjaTrader.NinjaScript.AddOns
                 SubscribeToAccounts();
             }
             Log("Configurazione aggiornata.");
+            UpdateUI();
         }
 
-        internal bool RunTest() => TestConnection();
-
-        // ═══════════════════════════════════════════════════════════════════
-        //  UTILITY
-        // ═══════════════════════════════════════════════════════════════════
+        // ── Utility ─────────────────────────────────────────────────────────
         private void Log(string msg)
         {
-            try { File.AppendAllText(logPath, DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + msg + "\n"); }
+            try
+            {
+                File.AppendAllText(logPath,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " " + msg + "\n",
+                    Encoding.UTF8);
+            }
             catch { }
         }
 
@@ -458,7 +482,6 @@ namespace NinjaTrader.NinjaScript.AddOns
             return m.Success ? int.Parse(m.Groups[1].Value) : def;
         }
 
-        // ─── Classi interne ────────────────────────────────────────────────
         private class PendingInfo
         {
             public Trade   Trade;
@@ -469,180 +492,243 @@ namespace NinjaTrader.NinjaScript.AddOns
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  FINESTRA UI WPF
+    //  Finestra UI
     // ═══════════════════════════════════════════════════════════════════════
     internal class AlphaDeskWindow : Window
     {
         private AlphaDeskBridge bridge;
-        private TextBox  tbEndpoint, tbKey;
-        private CheckBox chkSim, chkDbg;
+        private TextBox   tbEndpoint, tbKey;
+        private CheckBox  chkSim, chkDbg;
         private TextBlock tbConn, tbSent, tbFailed, tbQueued, tbLast, tbErr;
-        private Button   btnSave, btnTest;
 
-        // Colori brand AlphaDesk
-        private SolidColorBrush accent  = new SolidColorBrush(Color.FromRgb(0, 212, 170));
-        private SolidColorBrush bg0     = new SolidColorBrush(Color.FromRgb(8, 11, 15));
-        private SolidColorBrush bg2     = new SolidColorBrush(Color.FromRgb(18, 24, 32));
-        private SolidColorBrush border  = new SolidColorBrush(Color.FromRgb(30, 42, 56));
-        private SolidColorBrush text0   = new SolidColorBrush(Colors.White);
-        private SolidColorBrush text2   = new SolidColorBrush(Color.FromRgb(100, 130, 160));
-        private SolidColorBrush green   = new SolidColorBrush(Color.FromRgb(0, 212, 170));
-        private SolidColorBrush red     = new SolidColorBrush(Color.FromRgb(255, 77, 109));
+        private static SolidColorBrush accent = new SolidColorBrush(Color.FromRgb(0, 212, 170));
+        private static SolidColorBrush bg0    = new SolidColorBrush(Color.FromRgb(8, 11, 15));
+        private static SolidColorBrush bg2    = new SolidColorBrush(Color.FromRgb(18, 24, 32));
+        private static SolidColorBrush bord   = new SolidColorBrush(Color.FromRgb(30, 42, 56));
+        private static SolidColorBrush txt0   = new SolidColorBrush(Colors.White);
+        private static SolidColorBrush txt2   = new SolidColorBrush(Color.FromRgb(100, 130, 160));
+        private static SolidColorBrush green  = new SolidColorBrush(Color.FromRgb(0, 212, 170));
+        private static SolidColorBrush red    = new SolidColorBrush(Color.FromRgb(255, 77, 109));
 
         internal AlphaDeskWindow(AlphaDeskBridge b)
         {
-            bridge = b;
-            Title  = "AlphaDesk Bridge";
-            Width  = 480; Height = 520;
-            ResizeMode    = ResizeMode.CanMinimize;
-            Background    = bg0;
-            Foreground    = text0;
-            FontFamily    = new FontFamily("Segoe UI");
+            bridge         = b;
+            Title          = "AlphaDesk Bridge";
+            Width          = 480;
+            Height         = 540;
+            ResizeMode     = ResizeMode.CanMinimize;
+            Background     = bg0;
+            Foreground     = txt0;
+            FontFamily     = new System.Windows.Media.FontFamily("Segoe UI");
 
             var root = new StackPanel { Margin = new Thickness(20) };
 
-            // Header
-            root.Children.Add(new TextBlock {
-                Text = "Alpha Desk Bridge",
-                FontSize = 22, FontWeight = FontWeights.Bold,
-                Foreground = accent, Margin = new Thickness(0,0,0,4)
+            // Titolo
+            root.Children.Add(new TextBlock
+            {
+                Text = "Alpha Desk  Bridge",
+                FontSize = 20, FontWeight = FontWeights.Bold,
+                Foreground = accent, Margin = new Thickness(0, 0, 0, 4)
             });
-            root.Children.Add(new TextBlock {
+            root.Children.Add(new TextBlock
+            {
                 Text = "Invia ogni trade a AlphaDesk in tempo reale",
-                FontSize = 12, Foreground = text2, Margin = new Thickness(0,0,0,20)
+                FontSize = 12, Foreground = txt2, Margin = new Thickness(0, 0, 0, 20)
             });
 
             // Endpoint
-            root.Children.Add(Label("Endpoint URL"));
-            tbEndpoint = InputBox(b.Endpoint);
+            root.Children.Add(Lbl("Endpoint URL (da AlphaDesk → Eseguiti → Sync → NinjaTrader)"));
+            tbEndpoint = Inp(b.Endpoint);
             root.Children.Add(tbEndpoint);
 
             // API Key
-            root.Children.Add(Label("API Key"));
-            tbKey = InputBox(b.ApiKey);
+            root.Children.Add(Lbl("API Key (genera su AlphaDesk → Eseguiti → Sync → NinjaTrader → Step 3)"));
+            tbKey = Inp(b.ApiKeyVal);
             root.Children.Add(tbKey);
 
             // Opzioni
-            chkSim = new CheckBox { Content = "Invia anche trade simulati", IsChecked = b.SendSim,
-                Foreground = text0, Margin = new Thickness(0,10,0,4) };
-            chkDbg = new CheckBox { Content = "Debug mode (log dettagliato)", IsChecked = b.Debug,
-                Foreground = text2, Margin = new Thickness(0,0,0,14) };
+            chkSim = new CheckBox
+            {
+                Content = "Invia anche trade simulati (Sim101 ecc.)",
+                IsChecked = b.SendSim, Foreground = txt0,
+                Margin = new Thickness(0, 8, 0, 4)
+            };
+            chkDbg = new CheckBox
+            {
+                Content = "Debug mode (log dettagliato in AlphaDeskBridge.log)",
+                IsChecked = b.DbgMode, Foreground = txt2,
+                Margin = new Thickness(0, 0, 0, 16)
+            };
             root.Children.Add(chkSim);
             root.Children.Add(chkDbg);
 
             // Bottoni
-            var btnRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0,0,0,20) };
-            btnSave = Btn("Salva configurazione", accent, bg0);
-            btnTest = Btn("Test connessione", bg2, text0);
-            btnSave.Click += (s,e) => Save();
-            btnTest.Click += (s,e) => Test();
+            var btnRow = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 20)
+            };
+            var btnSave = MakeBtn("Salva configurazione", accent, bg0, true);
+            var btnTest = MakeBtn("Test connessione", bg2, txt0, false);
+            btnSave.Click += (s, e) => Save(btnSave);
+            btnTest.Click += (s, e) => Test(btnTest);
             btnRow.Children.Add(btnSave);
             btnRow.Children.Add(new Border { Width = 10 });
             btnRow.Children.Add(btnTest);
             root.Children.Add(btnRow);
 
             // Separatore
-            root.Children.Add(new Border { Height = 1, Background = border, Margin = new Thickness(0,0,0,16) });
-
-            // Status
-            root.Children.Add(new TextBlock { Text = "STATUS", FontSize = 10,
-                Foreground = text2, Margin = new Thickness(0,0,0,10), FontWeight = FontWeights.Bold });
-
-            tbConn   = Stat("Connessione");
-            tbSent   = Stat("Trade inviati");
-            tbFailed = Stat("Trade falliti");
-            tbQueued = Stat("In coda");
-            tbLast   = Stat("Ultimo invio");
-            tbErr    = Stat("Ultimo errore");
-
-            root.Children.Add(StatRow("Connessione", tbConn));
-            root.Children.Add(StatRow("Trade inviati", tbSent));
-            root.Children.Add(StatRow("Trade falliti", tbFailed));
-            root.Children.Add(StatRow("In coda (retry)", tbQueued));
-            root.Children.Add(StatRow("Ultimo invio", tbLast));
-            root.Children.Add(StatRow("Ultimo errore", tbErr));
-
-            // Help
-            root.Children.Add(new Border { Height = 1, Background = border, Margin = new Thickness(0,16,0,12) });
-            root.Children.Add(new TextBlock {
-                Text = "URL endpoint e API key: AlphaDesk → Eseguiti → Sync → NinjaTrader",
-                FontSize = 11, Foreground = text2, TextWrapping = TextWrapping.Wrap
+            root.Children.Add(new Border
+            {
+                Height = 1, Background = bord,
+                Margin = new Thickness(0, 0, 0, 16)
             });
 
-            Content = new ScrollViewer { Content = root, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            // Status
+            root.Children.Add(new TextBlock
+            {
+                Text = "STATUS IN TEMPO REALE",
+                FontSize = 10, Foreground = txt2,
+                Margin = new Thickness(0, 0, 0, 10),
+                FontWeight = FontWeights.Bold
+            });
+
+            tbConn   = new TextBlock { FontSize = 12 };
+            tbSent   = new TextBlock { FontSize = 12, Foreground = txt0 };
+            tbFailed = new TextBlock { FontSize = 12 };
+            tbQueued = new TextBlock { FontSize = 12 };
+            tbLast   = new TextBlock { FontSize = 12, Foreground = txt0 };
+            tbErr    = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
+
+            root.Children.Add(Row("Connessione",     tbConn));
+            root.Children.Add(Row("Trade inviati",   tbSent));
+            root.Children.Add(Row("Trade falliti",   tbFailed));
+            root.Children.Add(Row("In coda (retry)", tbQueued));
+            root.Children.Add(Row("Ultimo invio",    tbLast));
+            root.Children.Add(Row("Ultimo errore",   tbErr));
+
+            // Note
+            root.Children.Add(new Border { Height = 1, Background = bord, Margin = new Thickness(0, 16, 0, 12) });
+            root.Children.Add(new TextBlock
+            {
+                Text = "Il file di configurazione viene salvato in:\nDocumenti\\NinjaTrader 8\\AlphaDeskBridge.config.json",
+                FontSize = 11, Foreground = txt2, TextWrapping = TextWrapping.Wrap
+            });
+
+            Content = new ScrollViewer
+            {
+                Content = root,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
 
             Refresh();
 
-            // Aggiorna status ogni 5s
             var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
-            timer.Tick += (s,e) => Refresh();
+            timer.Tick += (s, e) => Refresh();
             timer.Start();
         }
 
-        private TextBlock Label(string t) => new TextBlock { Text = t, FontSize = 11,
-            Foreground = text2, Margin = new Thickness(0,0,0,4) };
+        private TextBlock Lbl(string t) => new TextBlock
+        {
+            Text = t, FontSize = 11, Foreground = txt2,
+            Margin = new Thickness(0, 0, 0, 4), TextWrapping = TextWrapping.Wrap
+        };
 
-        private TextBox InputBox(string val) => new TextBox {
-            Text = val, Background = bg2, Foreground = text0,
-            BorderBrush = border, Padding = new Thickness(8,6,8,6),
-            Margin = new Thickness(0,0,0,12), FontFamily = new FontFamily("Consolas"),
+        private TextBox Inp(string val) => new TextBox
+        {
+            Text = val ?? "", Background = bg2, Foreground = txt0,
+            BorderBrush = bord, Padding = new Thickness(8, 6, 8, 6),
+            Margin = new Thickness(0, 0, 0, 12),
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
             FontSize = 12
         };
 
-        private Button Btn(string label, SolidColorBrush bg, SolidColorBrush fg) => new Button {
+        private Button MakeBtn(string label, SolidColorBrush bg, SolidColorBrush fg, bool bold) => new Button
+        {
             Content = label, Background = bg, Foreground = fg,
-            Padding = new Thickness(14,8,14,8), BorderThickness = new Thickness(0),
-            FontSize = 13, FontWeight = FontWeights.SemiBold, Cursor = System.Windows.Input.Cursors.Hand
+            Padding = new Thickness(14, 8, 14, 8),
+            BorderThickness = new Thickness(0),
+            FontSize = 13,
+            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+            Cursor = System.Windows.Input.Cursors.Hand
         };
 
-        private TextBlock Stat(string _) => new TextBlock { FontSize = 12, Foreground = text0 };
-
-        private UIElement StatRow(string label, TextBlock value)
+        private UIElement Row(string label, TextBlock value)
         {
-            var row = new Grid { Margin = new Thickness(0,0,0,6) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            var lbl = new TextBlock { Text = label, Foreground = text2, FontSize = 12 };
-            Grid.SetColumn(lbl, 0); Grid.SetColumn(value, 1);
-            row.Children.Add(lbl); row.Children.Add(value);
-            return row;
+            var g = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            var lbl = new TextBlock { Text = label, Foreground = txt2, FontSize = 12 };
+            Grid.SetColumn(lbl, 0);
+            Grid.SetColumn(value, 1);
+            g.Children.Add(lbl);
+            g.Children.Add(value);
+            return g;
         }
 
         internal void Refresh()
         {
             bool conn = bridge.IsConn && bridge.IsConf;
-            tbConn.Text = conn ? "✓ Connesso" : (bridge.IsConf ? "⚠ Disconnesso" : "Non configurato");
+            tbConn.Text       = conn ? "✓ Connesso ad AlphaDesk"
+                              : bridge.IsConf ? "⚠ Non connesso (usa Test connessione)"
+                              : "✗ Non configurato — inserisci URL e API Key";
             tbConn.Foreground = conn ? green : red;
-            tbSent.Text   = bridge.Sent.ToString();
-            tbFailed.Text = bridge.Failed.ToString(); tbFailed.Foreground = bridge.Failed > 0 ? red : text0;
-            tbQueued.Text = bridge.Queued.ToString(); tbQueued.Foreground = bridge.Queued > 0 ? red : text0;
-            tbLast.Text   = bridge.LastSent.HasValue ? bridge.LastSent.Value.ToString("HH:mm:ss") : "—";
-            tbErr.Text    = string.IsNullOrEmpty(bridge.LastErr) ? "—" : bridge.LastErr;
-            tbErr.Foreground = string.IsNullOrEmpty(bridge.LastErr) ? text2 : red;
+
+            tbSent.Text = bridge.Sent.ToString() + " trade inviati con successo";
+
+            tbFailed.Text      = bridge.Failed > 0 ? bridge.Failed + " falliti" : "0";
+            tbFailed.Foreground = bridge.Failed > 0 ? red : txt2;
+
+            tbQueued.Text      = bridge.Queued > 0 ? bridge.Queued + " in attesa di retry" : "0";
+            tbQueued.Foreground = bridge.Queued > 0 ? red : txt2;
+
+            tbLast.Text = bridge.LastSent.HasValue
+                ? bridge.LastSent.Value.ToString("dd/MM/yyyy HH:mm:ss")
+                : "— nessun trade inviato ancora";
+
+            tbErr.Text       = string.IsNullOrEmpty(bridge.LastErr) ? "—" : bridge.LastErr;
+            tbErr.Foreground = string.IsNullOrEmpty(bridge.LastErr) ? txt2 : red;
         }
 
-        private void Save()
+        private void Save(Button btn)
         {
-            bridge.ApplySettings(tbEndpoint.Text, tbKey.Text,
-                chkSim.IsChecked ?? true, chkDbg.IsChecked ?? false);
-            btnSave.Content    = "✓ Salvato";
-            btnSave.Background = green;
+            bridge.ApplySettings(
+                tbEndpoint.Text,
+                tbKey.Text,
+                chkSim.IsChecked ?? true,
+                chkDbg.IsChecked ?? false
+            );
+            btn.Content    = "✓ Configurazione salvata!";
+            btn.Background = green;
             var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-            t.Tick += (s,e) => { btnSave.Content = "Salva configurazione"; btnSave.Background = accent; t.Stop(); };
+            t.Tick += (s, e) =>
+            {
+                btn.Content    = "Salva configurazione";
+                btn.Background = accent;
+                t.Stop();
+            };
             t.Start();
+            Refresh();
         }
 
-        private void Test()
+        private void Test(Button btn)
         {
-            btnTest.Content = "Test in corso...";
-            Task.Run(() => {
-                bool ok = bridge.RunTest();
-                Dispatcher.InvokeAsync(() => {
-                    btnTest.Content    = ok ? "✓ Connesso!" : "✗ Fallito";
-                    btnTest.Foreground = ok ? green : red;
+            btn.Content = "Test in corso...";
+            System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+            {
+                bool ok = bridge.TestConnection();
+                Dispatcher.InvokeAsync(() =>
+                {
+                    btn.Content    = ok ? "✓ Connesso!" : "✗ Connessione fallita";
+                    btn.Foreground = ok ? green : red;
                     Refresh();
-                    var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-                    t.Tick += (s,e) => { btnTest.Content = "Test connessione"; btnTest.Foreground = text0; t.Stop(); };
+                    var t = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+                    t.Tick += (s, e) =>
+                    {
+                        btn.Content    = "Test connessione";
+                        btn.Foreground = txt0;
+                        t.Stop();
+                    };
                     t.Start();
                 });
             });
