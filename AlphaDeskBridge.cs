@@ -589,10 +589,11 @@ namespace NinjaTrader.NinjaScript.AddOns
             Add(root, Lbl("API Key  (generala su AlphaDesk → Eseguiti → Sync → NinjaTrader → Step 3)"));
             tbKey = Inp(b.ApiKeyVal); Add(root, tbKey);
 
-            Add(root, Lbl("Nome conto personalizzato (opzionale: NomeNT8=NomeAlphaDesk, es. LFE05067595930005=LucidProp)"));
+            Add(root, Lbl("Nome conto in AlphaDesk (es: LFE05067595930005=LucidProp  oppure  Sim101=Demo)"));
             var aliasList2 = new System.Collections.Generic.List<string>();
             foreach (var kv in bridge.AliasMap) aliasList2.Add(kv.Key + "=" + kv.Value);
-            tbAlias = Inp(string.Join(",", aliasList2)); Add(root, tbAlias);
+            tbAlias = Inp(string.Join(",", aliasList2));
+            Add(root, tbAlias);
 
             chkSim = new CheckBox { Content = "Invia anche trade su conto simulato (Sim101 ecc.)",
                 IsChecked = b.SendSim, Foreground = t0, Margin = new Thickness(0,8,0,4) };
@@ -611,6 +612,11 @@ namespace NinjaTrader.NinjaScript.AddOns
             btnRow.Children.Add(bTest);
             Add(root, btnRow);
 
+            Add(root, new TextBlock {
+                Text = "ℹ Lo stato 'Non verificato' dopo il riavvio di NT8 è normale. I trade vengono inviati automaticamente — il Test serve solo per confermare la connessione.",
+                FontSize = 11, Foreground = t2, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 16)
+            });
             Add(root, new Border { Height=1, Background=brd, Margin=new Thickness(0,0,0,16) });
             Add(root, new TextBlock { Text="STATUS", FontSize=10, Foreground=t2,
                 Margin=new Thickness(0,0,0,10), FontWeight=FontWeights.Bold });
@@ -673,8 +679,8 @@ namespace NinjaTrader.NinjaScript.AddOns
         {
             bool ok = b.IsConn && b.IsConf;
             tbConn.Text      = ok ? "✓ Connesso ad AlphaDesk"
-                             : b.IsConf ? "⚠ Non connesso — usa Test connessione"
-                             : "✗ Non configurato — inserisci URL e API Key";
+                             : b.IsConf ? "⚠ Stato non verificato — premi Test connessione (i trade vengono inviati ugualmente)"
+                             : "✗ Non configurato — inserisci URL e API Key e salva";
             tbConn.Foreground = ok ? grn : red;
             tbSent.Text      = b.Sent + " trade inviati con successo";
             tbFailed.Text    = b.Failed > 0 ? b.Failed + " falliti" : "0";
@@ -700,13 +706,15 @@ namespace NinjaTrader.NinjaScript.AddOns
         private void Test(Button btn)
         {
             btn.Content = "Test in corso...";
+            btn.IsEnabled = false;
             ThreadPool.QueueUserWorkItem(_ => {
                 bool ok = b.TestConnection();
                 Dispatcher.InvokeAsync(() => {
-                    btn.Content    = ok ? "✓ Connesso!" : "✗ Fallito";
+                    btn.Content    = ok ? "✓ Connesso ad AlphaDesk!" : "✗ Connessione fallita — verifica URL e API Key";
                     btn.Foreground = ok ? grn : red;
+                    btn.IsEnabled  = true;
                     Refresh();
-                    var t = new DispatcherTimer { Interval=TimeSpan.FromSeconds(3) };
+                    var t = new DispatcherTimer { Interval=TimeSpan.FromSeconds(4) };
                     t.Tick += (s,e) => { btn.Content="Test connessione"; btn.Foreground=t0; t.Stop(); };
                     t.Start();
                 });

@@ -1,15 +1,13 @@
 'use client'
 import { useState, useEffect } from 'react'
 
-interface ApiKey { id: string; key: string; label: string; created_at: string; coretraders_key?: string }
+interface ApiKey { id: string; key: string; label: string; created_at: string }
 
 export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
   const [label, setLabel] = useState('NinjaTrader')
   const [copied, setCopied] = useState('')
-  const [ctKey, setCtKey] = useState('')
-  const [ctSaved, setCtSaved] = useState(false)
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -21,7 +19,6 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     const res = await fetch(`/api/apikey?userId=${userId}`)
     const data = await res.json()
     setKeys(data.keys || [])
-    if (data.keys?.[0]?.coretraders_key) setCtKey(data.keys[0].coretraders_key)
   }
 
   const generateKey = async () => {
@@ -43,16 +40,6 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const copy = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
     setCopied(id); setTimeout(() => setCopied(''), 2000)
-  }
-
-  const saveCtKey = async () => {
-    const id = keys[0]?.id
-    if (!id) return
-    await fetch('/api/apikey/coretraders', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, coretraders_key: ctKey })
-    })
-    setCtSaved(true); setTimeout(() => setCtSaved(false), 2000)
   }
 
   const inp = { padding: '7px 10px', background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 12, outline: 'none', fontFamily: 'var(--font-mono)', width: '100%' } as React.CSSProperties
@@ -164,22 +151,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
       </div>
 
       {/* Step 5 opzionale: Inoltro a CoreTraders */}
-      <div style={{ ...section, borderColor: 'rgba(255,255,255,0.05)' }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-          Step 5 — Inoltro a CoreTraders (opzionale)
-        </div>
-        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          Se vuoi continuare a usare CoreTraders in parallelo, incolla qui la tua chiave CoreTraders. AlphaDesk inoltrerà automaticamente ogni trade ricevuto — senza cambiare nulla su CoreTraders.
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input value={ctKey} onChange={e => setCtKey(e.target.value)} placeholder="Chiave CoreTraders (da Le mie connessioni → NinjaTrader)" style={{ ...inp, flex: 1 }} />
-          <button onClick={saveCtKey} disabled={!ctKey.trim() || !keys[0]}
-            style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: ctSaved ? 'var(--green-dim)' : 'var(--accent)', color: ctSaved ? 'var(--green)' : '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
-            {ctSaved ? '✓ Salvato' : 'Salva'}
-          </button>
-        </div>
-        {keys[0]?.coretraders_key && <div style={{ fontSize: 11, color: 'var(--green)' }}>✓ Forwarding a CoreTraders attivo</div>}
-      </div>
+
 
     </div>
   )
