@@ -613,12 +613,12 @@ namespace NinjaTrader.NinjaScript.AddOns
             // Mostra versione mascherata nell'input (gli ultimi 6 char visibili)
             if (b.ApiKeyVal != null && b.ApiKeyVal.Length > 6 && b.ApiKeyVal != "INCOLLA_LA_TUA_CHIAVE_API")
             {
-                tbKey.Text = new string('•', b.ApiKeyVal.Length - 6) + b.ApiKeyVal.Substring(b.ApiKeyVal.Length - 6);
-                tbKey.GotFocus += (s, e) => { if (tbKey.Text.Contains('•')) tbKey.Text = b.ApiKeyVal; };
+                tbKey.Text = new string('*', b.ApiKeyVal.Length - 6) + b.ApiKeyVal.Substring(b.ApiKeyVal.Length - 6);
+                tbKey.GotFocus += (s, e) => { if (tbKey.Text.Contains("*")) tbKey.Text = b.ApiKeyVal; };
                 tbKey.LostFocus += (s, e) => {
                     string val = tbKey.Text;
-                    if (!val.Contains('•') && val.Length > 6)
-                        tbKey.Text = new string('•', val.Length - 6) + val.Substring(val.Length - 6);
+                    if (!val.Contains("*") && val.Length > 6)
+                        tbKey.Text = new string('*', val.Length - 6) + val.Substring(val.Length - 6);
                 };
             }
             Add(root, tbKey);

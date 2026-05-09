@@ -21,8 +21,6 @@ const BROKERS = [
 
 export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }: SyncPanelProps & { userId?: string }) {
   const [selectedAccount, setSelectedAccount] = useState(accounts[0] || '')
-  const [newAccountName, setNewAccountName] = useState('')
-  const [showAddAccount, setShowAddAccount] = useState(false)
   const [selectedBroker, setSelectedBroker] = useState('tradovate_prop')
   const [syncing, setSyncing] = useState(false)
   const [result, setResult] = useState<any>(null)
