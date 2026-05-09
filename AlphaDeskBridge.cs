@@ -214,6 +214,9 @@ namespace NinjaTrader.NinjaScript.AddOns
                 string instrument = exec.Instrument != null
                     ? exec.Instrument.FullName : "N/A";
                 string key = account.Name + "|" + instrument;
+                // Applica alias nome conto se configurato
+                string displayName = accountAlias.ContainsKey(account.Name)
+                    ? accountAlias[account.Name] : account.Name;
 
                 if (debugMode)
                     Log("Execution: " + instrument + " " + exec.MarketPosition +
