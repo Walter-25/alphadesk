@@ -39,3 +39,18 @@ ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS rule_followed BOOLEAN;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS notes TEXT;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS setup_quality INTEGER;
 ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS strategy TEXT DEFAULT 'Manual';
+
+-- ─── API KEYS per CoreTraderExporter ─────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.api_keys (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  key TEXT UNIQUE NOT NULL,
+  label TEXT DEFAULT 'NinjaTrader',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE public.api_keys ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "api_keys_policy" ON public.api_keys;
+CREATE POLICY "api_keys_policy" ON public.api_keys FOR ALL USING (true);
+
+-- Campo extra per dati aggiuntivi CoreTrader (MAE ticks, MFE ticks, efficiency, ecc.)
+ALTER TABLE public.trades ADD COLUMN IF NOT EXISTS extra JSONB;

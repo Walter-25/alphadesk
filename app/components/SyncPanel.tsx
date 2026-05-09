@@ -1,4 +1,5 @@
 'use client'
+import CoreTraderSetup from './CoreTraderSetup'
 import { useState } from 'react'
 import { AccountSync } from '../lib/useTrades'
 
@@ -18,7 +19,7 @@ const BROKERS = [
   { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Prossimamente' },
 ]
 
-export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPanelProps) {
+export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }: SyncPanelProps & { userId?: string }) {
   const [selectedAccount, setSelectedAccount] = useState(accounts[0] || '')
   const [newAccountName, setNewAccountName] = useState('')
   const [showAddAccount, setShowAddAccount] = useState(false)
@@ -79,9 +80,10 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
 
         {/* Configurazione + sync */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+          {/* Selezione conto */}
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 8 }}>Conto da sincronizzare</div>
-            {/* Conto: select se esistono conti, altrimenti input libero */}
             {accounts.length > 0 ? (
               <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
                 style={{ ...inp, marginBottom: 8 }}>
@@ -104,87 +106,89 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload }: SyncPan
             )}
           </div>
 
-          {/* Config per broker */}
-          <div>
-            <button onClick={() => setShowConfig(!showConfig)} style={{ fontSize: 11, color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, marginBottom: showConfig ? 10 : 0 }}>
-              {showConfig ? '▼' : '▶'} Configurazione {selectedBroker}
-            </button>
-            {showConfig && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {selectedBroker === 'ninjatrader' && (
-                  <div>
-                    <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>URL NT8 (default: localhost)</div>
-                    <input style={inp} value={config.url} onChange={e => setConfig(p => ({ ...p, url: e.target.value }))} placeholder="http://localhost:36973" />
-                    <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.5 }}>
-                      NT8 deve essere aperto. Vai in Tools → Options → Remoting e abilita la porta 36973.
-                    </div>
-                  </div>
-                )}
-                {selectedBroker === 'interactive_brokers' && (
-                  <>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Flex Token</div>
-                      <input style={inp} value={config.flexToken} onChange={e => setConfig(p => ({ ...p, flexToken: e.target.value }))} placeholder="Token IB FlexQuery" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Query ID</div>
-                      <input style={inp} value={config.queryId} onChange={e => setConfig(p => ({ ...p, queryId: e.target.value }))} placeholder="ID della FlexQuery" />
-                    </div>
-                    <div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.5 }}>
-                      IB: Account Management → Reports → Flex Queries → crea una query con Trades e copia token e ID.
-                    </div>
-                  </>
-                )}
-                {(selectedBroker === 'tradovate' || selectedBroker === 'tradovate_prop') && (
-                  <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                    {selectedBroker === 'tradovate_prop' && (
-                      <div style={{padding:'8px 10px',background:'rgba(77,166,255,0.1)',borderRadius:6,fontSize:11,color:'#4da6ff',lineHeight:1.5}}>
-                        🏆 <strong>Tradovate Prop</strong> — usa le credenziali del tuo account Tradovate normale. L'endpoint si connette automaticamente all'ambiente di simulazione.
+          {/* NinjaTrader: usa CoreTraderSetup */}
+          {selectedBroker === 'ninjatrader' && userId && (
+            <CoreTraderSetup userId={userId} />
+          )}
+          {selectedBroker === 'ninjatrader' && !userId && (
+            <div style={{padding:'12px',background:'var(--bg-3)',borderRadius:8,fontSize:12,color:'var(--text-2)'}}>
+              Effettua il login per configurare la connessione CoreTrader.
+            </div>
+          )}
+
+          {/* Altri broker: config manuale + sync */}
+          {selectedBroker !== 'ninjatrader' && (
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div>
+                <button onClick={() => setShowConfig(!showConfig)} style={{ fontSize: 11, color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, marginBottom: showConfig ? 10 : 0 }}>
+                  {showConfig ? '▼' : '▶'} Configurazione {selectedBroker}
+                </button>
+                {showConfig && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    {selectedBroker === 'interactive_brokers' && (
+                      <>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Flex Token</div>
+                          <input style={inp} value={config.flexToken} onChange={e => setConfig(p => ({ ...p, flexToken: e.target.value }))} placeholder="Token IB FlexQuery" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Query ID</div>
+                          <input style={inp} value={config.queryId} onChange={e => setConfig(p => ({ ...p, queryId: e.target.value }))} placeholder="ID della FlexQuery" />
+                        </div>
+                        <div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                          IB: Account Management → Reports → Flex Queries → crea una query con Trades e copia token e ID.
+                        </div>
+                      </>
+                    )}
+                    {(selectedBroker === 'tradovate' || selectedBroker === 'tradovate_prop') && (
+                      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                        {selectedBroker === 'tradovate_prop' && (
+                          <div style={{padding:'8px 10px',background:'rgba(77,166,255,0.1)',borderRadius:6,fontSize:11,color:'#4da6ff',lineHeight:1.5}}>
+                            🏆 <strong>Tradovate Prop</strong> — usa le credenziali del tuo account Tradovate.
+                          </div>
+                        )}
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Email account Tradovate</div>
+                          <input style={inp} value={config.tvUser || ''} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="email@esempio.com" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Password Tradovate</div>
+                          <input style={{...inp}} type="password" value={config.tvPass || ''} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="••••••••" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>CID (App ID) — opzionale</div>
+                          <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="Lascia vuoto per usare il default" />
+                        </div>
+                        <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
+                          <strong style={{color:'var(--text-0)'}}>Email e password</strong> da usare:<br/>
+                          • <strong>Lucid Trading</strong>: email e password con cui ti sei registrato su lucidtrading.com<br/>
+                          • Non usare l&apos;ID conto (es. LTTH8J2N35X) — serve l&apos;<strong>email</strong>
+                        </div>
                       </div>
                     )}
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Email account Tradovate</div>
-                      <input style={inp} value={config.tvUser || ''} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="email@esempio.com" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Password Tradovate</div>
-                      <input style={{...inp}} type="password" value={config.tvPass || ''} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="••••••••" />
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>CID (App ID) — opzionale</div>
-                      <input style={inp} value={config.accessToken} onChange={e => setConfig(p => ({ ...p, accessToken: e.target.value }))} placeholder="Lascia vuoto per usare il default" />
-                    </div>
-                    <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.6,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
-                      <strong style={{color:'var(--text-0)'}}>Email e password</strong> da usare:<br/>
-                      • <strong>Lucid Trading</strong>: email e password con cui ti sei registrato su lucidtrading.com<br/>
-                      • Non usare l'ID conto (es. LTTH8J2N35X) — serve l'<strong>email</strong><br/>
-                      • Se hai dubbi: apri trader.tradovate.com → prova a fare login con quelle credenziali
-                    </div>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-
-          <div style={{fontSize:11,color:'var(--text-2)',marginBottom:8,padding:'6px 10px',background:'var(--bg-3)',borderRadius:6}}>
-            ⏰ Sincronizzazione automatica: <strong>22:30</strong> — o manuale in qualsiasi momento
-          </div>
-          <button onClick={handleSync} disabled={syncing || !selectedAccount.trim()}
-            style={{ padding: '10px', background: syncing ? 'var(--bg-4)' : 'var(--accent)', border: 'none', borderRadius: 8, color: syncing ? 'var(--text-2)' : '#000', fontSize: 13, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            {syncing ? '⟳ Sincronizzando...' : '⚡ Sincronizza ora'}
-          </button>
+              <div style={{fontSize:11,color:'var(--text-2)',padding:'6px 10px',background:'var(--bg-3)',borderRadius:6}}>
+                ⏰ Sincronizzazione automatica: <strong>22:30</strong> — o manuale in qualsiasi momento
+              </div>
+              <button onClick={handleSync} disabled={syncing || !selectedAccount.trim()}
+                style={{ padding: '10px', background: syncing ? 'var(--bg-4)' : 'var(--accent)', border: 'none', borderRadius: 8, color: syncing ? 'var(--text-2)' : '#000', fontSize: 13, fontWeight: 700, cursor: syncing ? 'not-allowed' : 'pointer' }}>
+                {syncing ? '⟳ Sincronizzando...' : '⚡ Sincronizza ora'}
+              </button>
+            </div>
+          )}
 
           {result && (
             <div style={{ padding: '10px 12px', borderRadius: 8, background: result.error ? 'var(--red-dim)' : result.newTrades > 0 ? 'var(--green-dim)' : 'var(--bg-3)', fontSize: 12, color: result.error ? 'var(--red)' : result.newTrades > 0 ? 'var(--green)' : 'var(--text-2)', lineHeight: 1.6 }}>
               {result.error
-                ? <>⚠ {result.error}<br/><span style={{fontSize:10,opacity:0.8}}>{getBrokerHelp()}</span></>
+                ? <>{String.fromCharCode(9888)} {result.error}<br/><span style={{fontSize:10,opacity:0.8}}>{getBrokerHelp()}</span></>
                 : result.newTrades > 0
-                  ? `✓ ${result.newTrades} nuovi trade sincronizzati`
-                  : '✓ Nessun trade nuovo dall\'ultima sync — i dati sono aggiornati'}
+                  ? `${result.newTrades} nuovi trade sincronizzati`
+                  : 'Nessun trade nuovo — dati aggiornati'}
             </div>
           )}
 
-          {/* Status tutti i conti */}
           {syncs.length > 0 && (
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 10 }}>
               <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', marginBottom: 8 }}>Status conti</div>

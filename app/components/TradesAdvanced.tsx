@@ -1075,7 +1075,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
           {tab==='emotion'&&<EmotionAnalytics trades={filteredTrades}/>}
           {tab==='sync'&&(
             tradesHook
-              ?<SyncPanel accounts={accounts} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload}/>
+              ?<SyncPanel accounts={accounts} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId}/>
               :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login.</div>
           )}
         </>
