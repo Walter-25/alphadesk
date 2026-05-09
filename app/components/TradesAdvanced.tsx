@@ -917,21 +917,20 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       const old = existing.get(t.ninja_id||t.id)
       return old ? {...t, emotion_tags:(old as any).emotion_tags, rule_followed:(old as any).rule_followed, notes:(old as any).notes, setup_quality:(old as any).setup_quality} : t
     })
+    // Salva SEMPRE su localStorage come backup immediato
+    const localUpdated = [...(tradesHook ? tradesHook.trades : trades).filter((t:Trade)=>t.account!==accountName.trim()),...merged]
+    try { localStorage.setItem('alphadesk_trades', JSON.stringify(localUpdated)) } catch {}
+    if (!tradesHook) setTrades(localUpdated)
+
     if (tradesHook) {
+      // Tenta salvataggio cloud in background
       const result = await tradesHook.saveTrades(merged, accountName.trim())
-      if (result?.success) {
+      if (result?.success && !result?.local) {
         setImportMsg(`✓ ${merged.length} trade salvati in cloud per "${accountName.trim()}" — disponibili ad ogni accesso`)
       } else {
-        // Fallback locale se Supabase fallisce
-        const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
-        setTrades(updated)
-        try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
-        setImportMsg(`✓ ${merged.length} trade caricati localmente per "${accountName.trim()}"`)
+        setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}" — salvati localmente`)
       }
     } else {
-      const updated = [...trades.filter((t:Trade)=>t.account!==accountName.trim()),...merged]
-      setTrades(updated)
-      try { localStorage.setItem('alphadesk_trades', JSON.stringify(updated)) } catch {}
       setImportMsg(`✓ ${merged.length} trade caricati per "${accountName.trim()}"`)
     }
     setSelectedAccounts([accountName.trim()])
@@ -1015,11 +1014,20 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         </div>
       )}
 
-      {accounts.length===0 ? (
+      {accounts.length===0 && tab !== 'sync' ? (
         <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:48,textAlign:'center'}}>
           <div style={{fontSize:40,opacity:0.15,marginBottom:14}}>◑</div>
           <div style={{fontSize:14,color:'var(--text-1)',marginBottom:6}}>Importa i tuoi dati NinjaTrader per iniziare</div>
-          <div style={{fontSize:12,color:'var(--text-2)',lineHeight:1.7}}>Performance Report → statistiche aggregate istantanee<br/>Lista Trade singoli → equity curve, calendario, tag emotivi</div>
+          <div style={{fontSize:12,color:'var(--text-2)',lineHeight:1.7,marginBottom:14}}>Lista Trade singoli → equity curve, calendario, tag emotivi</div>
+          <button onClick={()=>setTab('sync')} style={{padding:'8px 18px',background:'var(--accent)',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:600,cursor:'pointer'}}>⚡ Oppure configura il plugin AlphaDesk Bridge →</button>
+        </div>
+      ) : accounts.length===0 && tab === 'sync' ? (
+        <div>
+          {tab==='sync'&&(
+            tradesHook
+              ?<SyncPanel accounts={[]} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId}/>
+              :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login.</div>
+          )}
         </div>
       ) : (
         <>
@@ -1076,7 +1084,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
           {tab==='sync'&&(
             tradesHook
               ?<SyncPanel accounts={accounts} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId}/>
-              :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login.</div>
+              :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login — effettua l'accesso per abilitarla.</div>
           )}
         </>
       )}

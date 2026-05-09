@@ -3,11 +3,17 @@ import { useState, useEffect } from 'react'
 
 interface ApiKey { id: string; key: string; label: string; created_at: string; coretraders_key?: string }
 
-export default function CoreTraderSetup({ userId }: { userId: string }) {
+export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
-  const [copied, setCopied] = useState(false)
   const [label, setLabel] = useState('NinjaTrader')
+  const [copied, setCopied] = useState('')
+  const [ctKey, setCtKey] = useState('')
+  const [ctSaved, setCtSaved] = useState(false)
+
+  const endpointUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/api/ingest`
+    : 'https://alphadesk-ecru.vercel.app/api/ingest'
 
   useEffect(() => { loadKeys() }, [userId])
 
@@ -15,94 +21,115 @@ export default function CoreTraderSetup({ userId }: { userId: string }) {
     const res = await fetch(`/api/apikey?userId=${userId}`)
     const data = await res.json()
     setKeys(data.keys || [])
+    if (data.keys?.[0]?.coretraders_key) setCtKey(data.keys[0].coretraders_key)
   }
 
   const generateKey = async () => {
     setGenerating(true)
-    const res = await fetch('/api/apikey', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    await fetch('/api/apikey', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, label })
     })
-    const data = await res.json()
-    if (data.key) await loadKeys()
+    await loadKeys()
     setGenerating(false)
   }
 
   const deleteKey = async (id: string) => {
-    if (!confirm('Eliminare questa API key? Il plugin NinjaTrader smetterà di funzionare.')) return
+    if (!confirm('Eliminare questa API key? Il plugin AlphaDesk Bridge smetterà di funzionare.')) return
     await fetch('/api/apikey', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
     loadKeys()
   }
 
-  const copy = (text: string) => {
+  const copy = (text: string, id: string) => {
     navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setCopied(id); setTimeout(() => setCopied(''), 2000)
   }
 
-  const endpointUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/api/ingest`
-    : 'https://alphadesk-ecru.vercel.app/api/ingest'
+  const saveCtKey = async () => {
+    const id = keys[0]?.id
+    if (!id) return
+    await fetch('/api/apikey/coretraders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, coretraders_key: ctKey })
+    })
+    setCtSaved(true); setTimeout(() => setCtSaved(false), 2000)
+  }
 
   const inp = { padding: '7px 10px', background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 12, outline: 'none', fontFamily: 'var(--font-mono)', width: '100%' } as React.CSSProperties
+  const section = { background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' as const, gap: 10 }
+  const stepLabel = { fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Intestazione */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 12, padding: 18 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)', marginBottom: 6 }}>
-          ⚡ AlphaDesk Bridge — NinjaTrader 8 (Real-time)
-        </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* Header */}
+      <div style={{ ...section, borderColor: 'rgba(0,212,170,0.3)', background: 'var(--accent-dim)' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>⚡ AlphaDesk Bridge — Plugin NinjaTrader 8</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
-          Plugin proprietario AlphaDesk per NinjaTrader 8. Ogni trade chiuso su NT8 viene inviato automaticamente ad AlphaDesk in tempo reale — senza export manuale, senza altri software.
+          Plugin proprietario AlphaDesk per NinjaTrader 8. Ogni trade chiuso viene inviato automaticamente in tempo reale — senza export manuale, senza software di terze parti. Funziona con qualsiasi conto NT8: simulato, prop, live.
         </div>
       </div>
 
-      {/* Endpoint URL */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Step 1 — Endpoint URL</div>
+      {/* Step 1: Download plugin */}
+      <div style={section}>
+        <div style={stepLabel}>Step 1 — Scarica il plugin</div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Scarica il file <strong style={{ color: 'var(--text-0)' }}>AlphaDeskBridge.cs</strong> e copialo in:<br />
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 4 }}>
+            Documenti\NinjaTrader 8\bin\Custom\AddOns\
+          </code>
+          <br />Poi in NinjaTrader 8: <strong>NinjaScript Editor → F5</strong> per compilare → riavvia NT8.
+        </div>
+        <a href="/AlphaDeskBridge.cs" download="AlphaDeskBridge.cs"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>
+          ⬇ Scarica AlphaDeskBridge.cs
+        </a>
+      </div>
+
+      {/* Step 2: Endpoint URL */}
+      <div style={section}>
+        <div style={stepLabel}>Step 2 — URL Endpoint</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <input readOnly value={endpointUrl} style={inp} />
-          <button onClick={() => copy(endpointUrl)} style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: copied ? 'var(--green-dim)' : 'var(--bg-3)', color: copied ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
-            {copied ? '✓ Copiato' : '📋 Copia'}
+          <button onClick={() => copy(endpointUrl, 'url')}
+            style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: copied === 'url' ? 'var(--green-dim)' : 'var(--bg-3)', color: copied === 'url' ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
+            {copied === 'url' ? '✓ Copiato' : '📋 Copia'}
           </button>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8 }}>
-          Inserisci questo URL nel campo <strong>ApiEndpoint</strong> del file <code style={{ background: 'var(--bg-3)', padding: '1px 5px', borderRadius: 3 }}>CoreTraderExporter.config.json</code>
         </div>
       </div>
 
-      {/* API Key */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>Step 2 — API Key</div>
-
+      {/* Step 3: API Key */}
+      <div style={section}>
+        <div style={stepLabel}>Step 3 — Genera API Key</div>
         {keys.length === 0 ? (
-          <div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 12 }}>Genera una chiave API da inserire nel campo <strong>ApiKey</strong> del config file.</div>
+          <>
+            <div style={{ fontSize: 12, color: 'var(--text-2)' }}>Genera una chiave unica per autenticare il plugin.</div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Etichetta (es. NinjaTrader Casa)" style={{ ...inp, flex: 1 }} />
-              <button onClick={generateKey} disabled={generating} style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
+              <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Etichetta (es. PC Casa)" style={{ ...inp, flex: 1 }} />
+              <button onClick={generateKey} disabled={generating}
+                style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
                 {generating ? 'Generando...' : '⚡ Genera chiave'}
               </button>
             </div>
-          </div>
+          </>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keys.map(k => (
               <div key={k.id} style={{ background: 'var(--bg-3)', borderRadius: 9, padding: '10px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-0)' }}>{k.label}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-0)' }}>{k.label}</div>
                   <div style={{ fontSize: 10, color: 'var(--text-2)' }}>creata il {new Date(k.created_at).toLocaleDateString('it-IT')}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input readOnly value={k.key} style={{ ...inp, flex: 1, letterSpacing: '0.03em' }} />
-                  <button onClick={() => copy(k.key)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--text-1)', cursor: 'pointer', fontSize: 11 }}>📋</button>
+                  <input readOnly value={k.key} style={{ ...inp, flex: 1 }} />
+                  <button onClick={() => copy(k.key, k.id)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: copied === k.id ? 'var(--green-dim)' : 'var(--bg-2)', color: copied === k.id ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 11 }}>
+                    {copied === k.id ? '✓' : '📋'}
+                  </button>
                   <button onClick={() => deleteKey(k.id)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>🗑</button>
                 </div>
               </div>
             ))}
-            <button onClick={() => setGenerating(true)} style={{ padding: '6px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>+ Aggiungi altra chiave</button>
+            <button onClick={() => { setLabel('NinjaTrader'); setGenerating(true) }} style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>+ Aggiungi altra chiave</button>
             {generating && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Etichetta" style={{ ...inp, flex: 1 }} />
@@ -113,28 +140,47 @@ export default function CoreTraderSetup({ userId }: { userId: string }) {
         )}
       </div>
 
-      {/* Config file esempio */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16 }}>
-        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10 }}>Step 3 — Configura AlphaDesk Bridge in NT8</div>
-        <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 10, lineHeight: 1.6 }}>
-          Apri il file <code style={{ background: 'var(--bg-3)', padding: '1px 5px', borderRadius: 3 }}>Documenti\NinjaTrader 8\CoreTraderExporter.config.json</code> e aggiorna così:
+      {/* Step 4: Configura in NT8 */}
+      <div style={section}>
+        <div style={stepLabel}>Step 4 — Configura in NinjaTrader 8</div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Dopo aver riavviato NT8, trovi <strong style={{ color: 'var(--text-0)' }}>AlphaDesk Bridge</strong> nel menu Strumenti. Incolla URL e API key, clicca <strong style={{ color: 'var(--text-0)' }}>Salva → Test connessione</strong>.
         </div>
-        <pre style={{ background: 'var(--bg-3)', borderRadius: 8, padding: '12px 14px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', lineHeight: 1.7, overflow: 'auto' }}>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          In alternativa, modifica direttamente il file di configurazione:
+        </div>
+        <pre style={{ background: 'var(--bg-3)', borderRadius: 8, padding: '12px 14px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', lineHeight: 1.7, overflow: 'auto', margin: 0 }}>
 {`{
-  "ApiEndpoint": "${endpointUrl}",
-  "ApiKey": "la-tua-chiave-api",
-  "AccountFilter": "",
-  "EnableLogging": true,
-  "SendSimulatedTrades": true,
-  "MaxRetries": 3,
-  "TimeoutSeconds": 10,
-  "DebugMode": false
+  "Endpoint": "${endpointUrl}",
+  "ApiKey": "${keys[0]?.key || 'la-tua-chiave-api'}",
+  "SendSimulated": true,
+  "Debug": false,
+  "MaxRetries": 3
 }`}
         </pre>
-        <div style={{ marginTop: 10, fontSize: 11, color: 'var(--amber)', lineHeight: 1.6 }}>
-          ⚠ Dopo aver modificato il file, riavvia NinjaTrader 8 per applicare la nuova configurazione. Da quel momento ogni trade chiuso su NT8 arriverà automaticamente in AlphaDesk.
+        <div style={{ fontSize: 11, color: 'var(--amber)' }}>
+          ⚠ File: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>Documenti\NinjaTrader 8\AlphaDeskBridge.config.json</code>
         </div>
       </div>
+
+      {/* Step 5 opzionale: Inoltro a CoreTraders */}
+      <div style={{ ...section, borderColor: 'rgba(255,255,255,0.05)' }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          Step 5 — Inoltro a CoreTraders (opzionale)
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Se vuoi continuare a usare CoreTraders in parallelo, incolla qui la tua chiave CoreTraders. AlphaDesk inoltrerà automaticamente ogni trade ricevuto — senza cambiare nulla su CoreTraders.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={ctKey} onChange={e => setCtKey(e.target.value)} placeholder="Chiave CoreTraders (da Le mie connessioni → NinjaTrader)" style={{ ...inp, flex: 1 }} />
+          <button onClick={saveCtKey} disabled={!ctKey.trim() || !keys[0]}
+            style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: ctSaved ? 'var(--green-dim)' : 'var(--accent)', color: ctSaved ? 'var(--green)' : '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap' }}>
+            {ctSaved ? '✓ Salvato' : 'Salva'}
+          </button>
+        </div>
+        {keys[0]?.coretraders_key && <div style={{ fontSize: 11, color: 'var(--green)' }}>✓ Forwarding a CoreTraders attivo</div>}
+      </div>
+
     </div>
   )
 }

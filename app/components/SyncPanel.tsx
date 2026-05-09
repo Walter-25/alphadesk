@@ -1,5 +1,5 @@
 'use client'
-import CoreTraderSetup from './CoreTraderSetup'
+import AlphaDeskBridgeSetup from './CoreTraderSetup'
 import { useState } from 'react'
 import { AccountSync } from '../lib/useTrades'
 
@@ -108,7 +108,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
 
           {/* NinjaTrader: usa CoreTraderSetup */}
           {selectedBroker === 'ninjatrader' && userId && (
-            <CoreTraderSetup userId={userId} />
+            <AlphaDeskBridgeSetup userId={userId} />
           )}
           {selectedBroker === 'ninjatrader' && !userId && (
             <div style={{padding:'12px',background:'var(--bg-3)',borderRadius:8,fontSize:12,color:'var(--text-2)'}}>
