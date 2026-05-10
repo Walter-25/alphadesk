@@ -2,12 +2,14 @@
 import { useState, useEffect } from 'react'
 
 interface ApiKey { id: string; key: string; label: string; created_at: string }
+interface AliasRow { ntAccount: string; displayName: string }
 
 export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
-  const [keys, setKeys] = useState<ApiKey[]>([])
+  const [keys, setKeys]             = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
-  const [label, setLabel] = useState('NinjaTrader')
-  const [copied, setCopied] = useState('')
+  const [label, setLabel]           = useState('NinjaTrader')
+  const [copied, setCopied]         = useState('')
+  const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -16,7 +18,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   useEffect(() => { loadKeys() }, [userId])
 
   const loadKeys = async () => {
-    const res = await fetch(`/api/apikey?userId=${userId}`)
+    const res  = await fetch(`/api/apikey?userId=${userId}`)
     const data = await res.json()
     setKeys(data.keys || [])
   }
@@ -42,6 +44,36 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     setCopied(id); setTimeout(() => setCopied(''), 2000)
   }
 
+  const addAlias    = () => setAliases(a => [...a, { ntAccount: '', displayName: '' }])
+  const removeAlias = (i: number) => setAliases(a => a.filter((_, idx) => idx !== i))
+  const updateAlias = (i: number, field: keyof AliasRow, val: string) =>
+    setAliases(a => a.map((row, idx) => idx === i ? { ...row, [field]: val } : row))
+
+  const aliasString = aliases
+    .filter(r => r.ntAccount.trim() && r.displayName.trim())
+    .map(r => `${r.ntAccount.trim()}=${r.displayName.trim()}`)
+    .join(',')
+
+  const maskedKey = (k: ApiKey) =>
+    k.key.substring(0, 8) + '••••••••••••••••' + k.key.slice(-4)
+
+  const downloadConfig = () => {
+    const apiKey = keys[0]?.key || 'INCOLLA_LA_TUA_CHIAVE_API'
+    const json = JSON.stringify({
+      Endpoint:      endpointUrl,
+      ApiKey:        apiKey,
+      SendSimulated: true,
+      Debug:         false,
+      MaxRetries:    3,
+      AccountAlias:  aliasString || ''
+    }, null, 2)
+    const blob = new Blob([json], { type: 'application/json' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a'); a.href = url
+    a.download = 'AlphaDeskBridge.config.json'; a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const inp = { padding: '7px 10px', background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 12, outline: 'none', fontFamily: 'var(--font-mono)', width: '100%' } as React.CSSProperties
   const section = { background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column' as const, gap: 10 }
   const stepLabel = { fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textTransform: 'uppercase' as const, letterSpacing: '0.06em' }
@@ -57,15 +89,13 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {/* Step 1: Download plugin */}
+      {/* Step 1 */}
       <div style={section}>
         <div style={stepLabel}>Step 1 — Scarica il plugin</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
           Scarica il file <strong style={{ color: 'var(--text-0)' }}>AlphaDeskBridge.cs</strong> e copialo in:<br />
-          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 4 }}>
-            Documenti\NinjaTrader 8\bin\Custom\AddOns\
-          </code>
-          <br />Poi in NinjaTrader 8: <strong>NinjaScript Editor → F5</strong> per compilare → riavvia NT8.
+          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 4 }}>Documenti\NinjaTrader 8\bin\Custom\AddOns\</code><br />
+          Poi in NinjaTrader 8: <strong>NinjaScript Editor → F5</strong> per compilare → riavvia NT8.
         </div>
         <a href="/AlphaDeskBridge.cs" download="AlphaDeskBridge.cs"
           style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>
@@ -73,7 +103,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </a>
       </div>
 
-      {/* Step 2: Endpoint URL */}
+      {/* Step 2 */}
       <div style={section}>
         <div style={stepLabel}>Step 2 — URL Endpoint</div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -85,7 +115,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </div>
       </div>
 
-      {/* Step 3: API Key */}
+      {/* Step 3 */}
       <div style={section}>
         <div style={stepLabel}>Step 3 — Genera API Key</div>
         {keys.length === 0 ? (
@@ -108,65 +138,95 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
                   <div style={{ fontSize: 10, color: 'var(--text-2)' }}>creata il {new Date(k.created_at).toLocaleDateString('it-IT')}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <input readOnly
-                    value={copied === k.id ? k.key : k.key.substring(0, 8) + '••••••••••••••••' + k.key.slice(-4)}
-                    style={{ ...inp, flex: 1, fontFamily: 'var(--font-mono)', letterSpacing: '0.05em' }} />
-                  <button onClick={() => copy(k.key, k.id)} title="Copia chiave completa"
+                  <input readOnly value={copied === k.id ? k.key : maskedKey(k)}
+                    style={{ ...inp, flex: 1, letterSpacing: '0.05em' }} />
+                  <button onClick={() => copy(k.key, k.id)}
                     style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: copied === k.id ? 'var(--green-dim)' : 'var(--bg-2)', color: copied === k.id ? 'var(--green)' : 'var(--text-1)', cursor: 'pointer', fontSize: 11, whiteSpace: 'nowrap' }}>
                     {copied === k.id ? '✓ Copiato' : '📋 Copia'}
                   </button>
-                  <button onClick={() => deleteKey(k.id)} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>🗑</button>
+                  <button onClick={() => deleteKey(k.id)}
+                    style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>🗑</button>
                 </div>
-                <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>
-                  La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla
-                </div>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla</div>
               </div>
             ))}
-            <button onClick={() => { setLabel('NinjaTrader'); setGenerating(true) }} style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>+ Aggiungi altra chiave</button>
+            <button onClick={() => { setLabel('NinjaTrader'); setGenerating(true) }}
+              style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>
+              + Aggiungi altra chiave
+            </button>
             {generating && (
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={label} onChange={e => setLabel(e.target.value)} placeholder="Etichetta" style={{ ...inp, flex: 1 }} />
-                <button onClick={generateKey} style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Genera</button>
+                <button onClick={generateKey}
+                  style={{ padding: '7px 14px', borderRadius: 7, border: 'none', background: 'var(--accent)', color: '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>Genera</button>
               </div>
             )}
           </div>
         )}
       </div>
 
-      {/* Step 4: Configura in NT8 */}
+      {/* Step 4: Mapping conti */}
       <div style={section}>
-        <div style={stepLabel}>Step 4 — Configura in NinjaTrader 8</div>
+        <div style={stepLabel}>Step 4 — Mapping conti (opzionale)</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          Dopo aver riavviato NT8, trovi <strong style={{ color: 'var(--text-0)' }}>AlphaDesk Bridge</strong> nel menu Strumenti. Incolla URL e API key, clicca <strong style={{ color: 'var(--text-0)' }}>Salva → Test connessione</strong>.
+          Associa i nomi tecnici dei conti NT8 ai nomi che vuoi vedere in AlphaDesk. Il numero del conto non viene mai mostrato — viene sostituito dal nome scelto.
         </div>
-        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          In alternativa, modifica direttamente il file di configurazione:
-        </div>
-        <pre style={{ background: 'var(--bg-3)', borderRadius: 8, padding: '12px 14px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', lineHeight: 1.7, overflow: 'auto', margin: 0 }}>
-{`{
-  "Endpoint": "${endpointUrl}",
-  "ApiKey": "${keys[0]?.key || 'la-tua-chiave-api'}",
-  "SendSimulated": true,
-  "Debug": false,
-  "MaxRetries": 3
-}`}
-        </pre>
-        <div style={{ fontSize: 11, color: 'var(--amber)' }}>
-          ⚠ File: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>Documenti\NinjaTrader 8\AlphaDeskBridge.config.json</code>
-        </div>
-        <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 8, lineHeight: 1.6, padding: '8px 10px', background: 'var(--bg-3)', borderRadius: 6 }}>
-          <strong style={{ color: 'var(--text-0)' }}>Più conti con nomi diversi?</strong><br />
-          Nella finestra AlphaDesk Bridge in NT8 trovi il campo <em>"Nome conto in AlphaDesk"</em>.<br />
-          Scrivi i mapping separati da <strong>virgola</strong>:<br />
-          <code style={{ fontFamily: 'var(--font-mono)', fontSize: 10, background: 'var(--bg-2)', padding: '2px 6px', borderRadius: 3 }}>
-            LFE05067595930005=LucidProp, Sim101=Demo, ALTRO123=LiveConto
-          </code><br />
-          Il numero del conto NT8 non viene mai mostrato su AlphaDesk — viene sostituito dal nome scelto.
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Nome conto in NT8</div>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Nome in AlphaDesk</div>
+            <div />
+          </div>
+          {aliases.map((row, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+              <input value={row.ntAccount} onChange={e => updateAlias(i, 'ntAccount', e.target.value)}
+                placeholder="es. LFE05067595930005" style={inp} />
+              <input value={row.displayName} onChange={e => updateAlias(i, 'displayName', e.target.value)}
+                placeholder="es. LucidProp1" style={inp} />
+              <button onClick={() => removeAlias(i)} disabled={aliases.length === 1}
+                style={{ padding: '4px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: aliases.length === 1 ? 'transparent' : 'var(--red-dim)', color: aliases.length === 1 ? 'var(--text-2)' : 'var(--red)', cursor: aliases.length === 1 ? 'default' : 'pointer', fontSize: 13 }}>✕</button>
+            </div>
+          ))}
+          <button onClick={addAlias}
+            style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11, textAlign: 'left' as const }}>
+            + Aggiungi conto
+          </button>
+          {aliasString && (
+            <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
+              {aliasString}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Step 5 opzionale: Inoltro a CoreTraders */}
-
+      {/* Step 5: Scarica config */}
+      <div style={section}>
+        <div style={stepLabel}>Step 5 — Scarica e installa il config</div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Scarica il file di configurazione già compilato con la tua API key e il mapping conti, e copialo in:
+        </div>
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '4px 8px', borderRadius: 4, color: 'var(--text-1)' }}>
+          Documenti\NinjaTrader 8\AlphaDeskBridge.config.json
+        </code>
+        <pre style={{ background: 'var(--bg-3)', borderRadius: 8, padding: '12px 14px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', lineHeight: 1.7, overflow: 'auto', margin: 0 }}>
+{`{
+  "Endpoint": "${endpointUrl}",
+  "ApiKey": "${keys[0] ? maskedKey(keys[0]) : 'genera-prima-la-chiave'}",
+  "SendSimulated": true,
+  "Debug": false,
+  "MaxRetries": 3,
+  "AccountAlias": "${aliasString || ''}"
+}`}
+        </pre>
+        <div style={{ fontSize: 10, color: 'var(--text-2)' }}>ℹ La chiave è mascherata nell&apos;anteprima — nel file scaricato sarà quella reale.</div>
+        <button onClick={downloadConfig} disabled={keys.length === 0}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: keys.length === 0 ? 'var(--bg-4)' : 'var(--accent)', color: keys.length === 0 ? 'var(--text-2)' : '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: keys.length === 0 ? 'not-allowed' : 'pointer', border: 'none', width: 'fit-content' }}>
+          ⬇ Scarica AlphaDeskBridge.config.json
+        </button>
+        {keys.length === 0 && (
+          <div style={{ fontSize: 11, color: 'var(--amber)' }}>⚠ Genera prima una API key al Step 3</div>
+        )}
+      </div>
 
     </div>
   )

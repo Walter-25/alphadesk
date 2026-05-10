@@ -77,13 +77,25 @@ namespace NinjaTrader.NinjaScript.AddOns
                 logPath    = Path.Combine(ntFolder, "AlphaDeskBridge.log");
 
                 LoadConfig();
-                if (isConfigured) Subscribe();
+
+                // Delay 2s prima di Subscribe: NT8 deve finire di inizializzare gli account
+                System.Threading.Timer startTimer = null;
+                startTimer = new System.Threading.Timer(_ =>
+                {
+                    try
+                    {
+                        if (isConfigured) Subscribe();
+                        Log("AlphaDesk Bridge v1.2 pronto. Endpoint: " +
+                            (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
+                    }
+                    catch (Exception ex) { Log("Errore avvio: " + ex.Message); }
+                    finally { startTimer?.Dispose(); }
+                }, null, 2000, Timeout.Infinite);
 
                 retryTimer = new System.Threading.Timer(RetryFailed, null,
                     TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-                Log("AlphaDesk Bridge v1.2 avviato. Endpoint: " +
-                    (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
+                Log("AlphaDesk Bridge v1.2 in caricamento...");
             }
             else if (State == State.Terminated)
             {
@@ -169,23 +181,53 @@ namespace NinjaTrader.NinjaScript.AddOns
         // ═══════════════════════════════════════════════════════════════════
         private void Subscribe()
         {
-            lock (lockObj)
+            try
             {
-                foreach (Account acc in Account.All)
+                // Usa Dispatcher per accedere ad Account.All in modo thread-safe
+                if (Application.Current?.Dispatcher != null)
                 {
-                    // ExecutionUpdate è l'evento corretto per AddOn in NT8
-                    acc.ExecutionUpdate += OnExecutionUpdate;
-                    Log("Sottoscritto a: " + acc.Name);
+                    Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        try
+                        {
+                            foreach (Account acc in Account.All)
+                            {
+                                acc.ExecutionUpdate += OnExecutionUpdate;
+                                Log("Sottoscritto a: " + acc.Name);
+                            }
+                        }
+                        catch (Exception ex) { Log("Errore Subscribe (dispatcher): " + ex.Message); }
+                    });
+                }
+                else
+                {
+                    foreach (Account acc in Account.All)
+                    {
+                        acc.ExecutionUpdate += OnExecutionUpdate;
+                        Log("Sottoscritto a: " + acc.Name);
+                    }
                 }
             }
+            catch (Exception ex) { Log("Errore Subscribe: " + ex.Message); }
         }
 
         private void Unsubscribe()
         {
             try
             {
-                foreach (Account acc in Account.All)
-                    acc.ExecutionUpdate -= OnExecutionUpdate;
+                if (Application.Current?.Dispatcher != null && !Application.Current.Dispatcher.CheckAccess())
+                {
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        foreach (Account acc in Account.All)
+                            try { acc.ExecutionUpdate -= OnExecutionUpdate; } catch { }
+                    });
+                }
+                else
+                {
+                    foreach (Account acc in Account.All)
+                        try { acc.ExecutionUpdate -= OnExecutionUpdate; } catch { }
+                }
             }
             catch { }
         }
@@ -418,37 +460,9 @@ namespace NinjaTrader.NinjaScript.AddOns
         // ═══════════════════════════════════════════════════════════════════
         //  UI
         // ═══════════════════════════════════════════════════════════════════
-        protected override void OnWindowCreated(Window window)
-        {
-            try
-            {
-                // Cerca il menu principale di NT8 nell'albero visuale
-                var menu = FindVisualChild<Menu>(window);
-                if (menu == null) return;
-
-                // Evita duplicati
-                foreach (object existing in menu.Items)
-                    if (existing is MenuItem mi && mi.Header?.ToString() == "AlphaDesk Bridge") return;
-
-                var item = new MenuItem { Header = "AlphaDesk Bridge" };
-                item.Click += (s, e) => ShowWindow();
-                menu.Items.Add(item);
-            }
-            catch { }
-        }
-
-        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
-        {
-            if (parent == null) return null;
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
-            {
-                var child = VisualTreeHelper.GetChild(parent, i);
-                if (child is T found) return found;
-                var result = FindVisualChild<T>(child);
-                if (result != null) return result;
-            }
-            return null;
-        }
+        // Nota: la finestra AlphaDesk Bridge si apre con F5 nel NinjaScript Editor
+        // oppure ricompilando il plugin. Non usa OnWindowCreated per evitare
+        // di aprirsi su ogni finestra NT8.
 
         private void ShowWindow()
         {
