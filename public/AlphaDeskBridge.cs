@@ -388,7 +388,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     req.ContentLength = data.Length;
                     req.Timeout       = 10000;
                     req.Headers.Add("X-API-Key", apiKey);
-                    req.Headers.Add("User-Agent", "AlphaDeskBridge/1.2");
+                    req.UserAgent = "AlphaDeskBridge/1.2";
 
                     using (Stream s = req.GetRequestStream())
                         s.Write(data, 0, data.Length);

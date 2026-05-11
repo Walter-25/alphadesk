@@ -117,7 +117,7 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
       const mfe = pn(get(cols, ['mfe']))
       trades.push({
         id: `${account}-${i}`,
-        ninja_id: `${account}-NT-${get(cols,['trade number'])||i}`,
+        ninja_id: `${account}-NT-${get(cols,['trade number'])||i}-${entryStr.replace(/[^0-9]/g,'').slice(0,12)}`,
         account,
         strategy: get(cols, ['strategy']) || 'Manual',
         instrument: get(cols, ['instrument']) || 'N/A',
@@ -691,8 +691,8 @@ function TradeRow({ trade, onUpdate }: { trade: Trade; onUpdate: (id: string, u:
         <div style={{fontSize:10,color:'var(--text-1)',fontFamily:'var(--font-mono)'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
         <div style={{fontSize:11,color:'var(--text-2)'}}>{trade.duration_min}m</div>
         <div style={{fontFamily:'var(--font-mono)',fontSize:11}}>{trade.quantity}</div>
-        <div style={{fontFamily:'var(--font-mono)',fontWeight:600,color:pc(trade.pnl)}}>${trade.pnl.toFixed(0)}</div>
-        <div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:pc(trade.net_pnl)}}>${trade.net_pnl.toFixed(0)}</div>
+        <div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:pc(trade.net_pnl)}}>{trade.net_pnl>=0?'+':''}{trade.net_pnl.toFixed(2)}</div>
+        <div style={{fontSize:10,color:'var(--text-2)',fontFamily:'var(--font-mono)'}}>{trade.commission>0?`comm -${trade.commission.toFixed(2)}`:''}</div>
         <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
           {tags.slice(0,3).map(t=>{const tag=EMOTION_TAGS.find(e=>e.id===t);return tag?<span key={t} style={{fontSize:9,padding:'1px 5px',borderRadius:3,background:`${tag.color}22`,color:tag.color,fontWeight:600}}>{tag.label}</span>:null})}
           {rule===true&&<span style={{fontSize:9,padding:'1px 5px',borderRadius:3,background:'var(--green-dim)',color:'var(--green)',fontWeight:600}}>✓</span>}
