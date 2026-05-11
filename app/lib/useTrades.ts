@@ -56,10 +56,11 @@ export function useTrades(userId: string) {
         if (lp) localPerf = JSON.parse(lp)
       } catch {}
 
-      // Carica da Supabase
-      const { data: tradesData, error: tradesError } = await supabase
-        .from('trades').select('*').eq('user_id', userId)
-        .order('entry_time', { ascending: false })
+      // Carica da Supabase tramite API route (usa service role, bypassa RLS browser)
+      const tradesRes = await fetch(`/api/trades?userId=${userId}`)
+      const tradesJson = await tradesRes.json()
+      const tradesData = tradesJson.trades || null
+      const tradesError = tradesJson.error || null
 
       if (!tradesError && tradesData && tradesData.length > 0) {
         // Supabase ha dati — merge con locale (locale può avere tag emotivi più aggiornati)
