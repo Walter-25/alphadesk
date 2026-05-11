@@ -414,12 +414,12 @@ function PnLCalendar({ trades }: { trades: Trade[] }) {
             const isToday = key === new Date().toISOString().split('T')[0]
             return (
               <div key={day} title={s ? `${s.trades} trade · ${fmtUSD(s.pnl)} · WR ${(s.wins/s.trades*100).toFixed(0)}%` : ''}
-                style={{aspectRatio:'1',borderRadius:6,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontSize:10,cursor:s?'pointer':'default',
+                style={{aspectRatio:'1',borderRadius:6,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',fontSize:14,cursor:s?'pointer':'default',
                   background:!s?'var(--bg-3)':s.pnl>0?`rgba(0,212,170,${0.15+intensity*0.7})`:`rgba(255,77,109,${0.15+intensity*0.7})`,
                   border:isToday?'1px solid var(--accent)':'1px solid transparent',
                   color:s?'white':'var(--text-2)',fontWeight:s?600:400}}>
                 <div>{day}</div>
-                {s && <div style={{fontSize:8,opacity:0.9}}>{s.pnl>0?'+':''}{s.pnl.toFixed(0)}</div>}
+                {s && <div style={{fontSize:11,opacity:0.9,fontFamily:'var(--font-mono)',fontWeight:700}}>{s.pnl>0?'+':''}{s.pnl.toFixed(0)}</div>}
               </div>
             )
           })}
@@ -714,16 +714,16 @@ function TradeRow({ trade, onUpdate }: { trade: Trade; onUpdate: (id: string, u:
   return (
     <>
       <div onClick={() => setOpen(!open)}
-        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 105px 50px 50px 70px 70px 1fr',padding:'9px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:12,alignItems:'center',cursor:'pointer'}}
+        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 105px 50px 50px 70px 70px 1fr',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:13,alignItems:'center',cursor:'pointer'}}
         onMouseEnter={e => (e.currentTarget.style.background='var(--bg-3)')}
         onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
         <div style={{fontSize:10,color:'var(--text-2)'}}>{open?'▼':'▶'}</div>
         <div style={{fontWeight:500,color:'var(--text-0)'}}>{trade.instrument}</div>
-        <div style={{fontSize:11,color:'var(--text-2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trade.strategy}</div>
+        <div style={{fontSize:12,color:'var(--text-2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trade.strategy}</div>
         <div><span style={{display:'inline-block',padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:600,background:trade.direction==='Long'?'var(--green-dim)':'var(--red-dim)',color:trade.direction==='Long'?'var(--green)':'var(--red)'}}>{trade.direction}</span></div>
-        <div style={{fontSize:10,color:'var(--text-1)',fontFamily:'var(--font-mono)'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
-        <div style={{fontSize:11,color:'var(--text-2)'}}>{trade.duration_min}m</div>
-        <div style={{fontFamily:'var(--font-mono)',fontSize:11}}>{trade.quantity}</div>
+        <div style={{fontSize:12,color:'var(--text-1)',fontFamily:'var(--font-mono)'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
+        <div style={{fontSize:12,color:'var(--text-2)'}}>{trade.duration_min}m</div>
+        <div style={{fontFamily:'var(--font-mono)',fontSize:12}}>{trade.quantity}</div>
         <div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:pc(trade.net_pnl)}}>{trade.net_pnl>=0?'+':''}{trade.net_pnl.toFixed(2)}</div>
         <div style={{fontSize:10,color:'var(--text-2)',fontFamily:'var(--font-mono)'}}>{trade.commission>0?`comm -${trade.commission.toFixed(2)}`:''}</div>
         <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>

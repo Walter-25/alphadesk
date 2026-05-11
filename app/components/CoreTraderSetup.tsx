@@ -227,10 +227,39 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
               <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Mapping attivi</div>
               <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
                 {savedAliases.map((r, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-3)', borderRadius: 6, padding: '5px 10px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)' }}>{r.ntAccount}</span>
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 32px 32px', alignItems: 'center', gap: 6, background: 'var(--bg-3)', borderRadius: 6, padding: '5px 10px' }}>
+                    <input
+                      value={r.ntAccount}
+                      onChange={e => {
+                        const updated = savedAliases.map((x, idx) => idx === i ? { ...x, ntAccount: e.target.value } : x)
+                        setSavedAliases(updated)
+                        setAliases(updated)
+                      }}
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)', background: 'transparent', border: 'none', outline: 'none', padding: '2px 4px', borderRadius: 4 }}
+                      onFocus={e => e.target.style.background = 'var(--bg-2)'}
+                      onBlur={e => e.target.style.background = 'transparent'}
+                    />
                     <span style={{ color: 'var(--accent)', fontSize: 11 }}>→</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-0)', fontWeight: 600 }}>{r.displayName}</span>
+                    <input
+                      value={r.displayName}
+                      onChange={e => {
+                        const updated = savedAliases.map((x, idx) => idx === i ? { ...x, displayName: e.target.value } : x)
+                        setSavedAliases(updated)
+                        setAliases(updated)
+                      }}
+                      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-0)', fontWeight: 600, background: 'transparent', border: 'none', outline: 'none', padding: '2px 4px', borderRadius: 4 }}
+                      onFocus={e => e.target.style.background = 'var(--bg-2)'}
+                      onBlur={e => e.target.style.background = 'transparent'}
+                    />
+                    <button onClick={() => saveAliases()} title="Salva modifiche"
+                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--accent)', cursor: 'pointer', fontSize: 11 }}>✓</button>
+                    <button onClick={() => {
+                        const updated = savedAliases.filter((_, idx) => idx !== i)
+                        setSavedAliases(updated)
+                        setAliases(updated.length > 0 ? updated : [{ ntAccount: '', displayName: '' }])
+                        try { localStorage.setItem('ad_account_aliases_' + userId, JSON.stringify(updated)) } catch {}
+                      }}
+                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>✕</button>
                   </div>
                 ))}
               </div>
