@@ -26,11 +26,16 @@ export async function POST(req: NextRequest) {
   const { trades, userId, account, source } = await req.json()
   if (!userId || !trades?.length) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
   const sb = admin()
-  const rows = trades.map((t: any) => ({
-    ...t, user_id: userId,
-    source: source || 'csv',
-    imported_at: new Date().toISOString(),
-  }))
+  const rows = trades.map((t: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, ...rest } = t  // Rimuovi id non-UUID — Supabase lo genera
+    return {
+      ...rest,
+      user_id: userId,
+      source: source || 'csv',
+      imported_at: new Date().toISOString(),
+    }
+  })
   const { error, count } = await sb.from('trades').upsert(rows, {
     onConflict: 'ninja_id,user_id',
     ignoreDuplicates: false
