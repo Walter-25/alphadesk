@@ -10,6 +10,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [label, setLabel]           = useState('NinjaTrader')
   const [copied, setCopied]         = useState('')
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
+  const [aliasesSaved, setAliasesSaved] = useState(false)
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
