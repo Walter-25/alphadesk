@@ -1,5 +1,5 @@
 'use client'
-import AlphaDeskBridgeSetup from './CoreTraderSetup'
+import AlphaDeskBridgeSetup from './AlphaDeskBridgeSetup'
 import { useState } from 'react'
 import { AccountSync } from '../lib/useTrades'
 
