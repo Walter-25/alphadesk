@@ -657,6 +657,39 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
         </div>
       </div>
 
+      {/* Statistiche per strumento */}
+      {hasTrades && (() => {
+        const instrMap: Record<string,{pnl:number,wins:number,count:number}> = {}
+        trades.forEach(t => {
+          const k = t.instrument || 'N/A'
+          if (!instrMap[k]) instrMap[k] = {pnl:0, wins:0, count:0}
+          instrMap[k].pnl += t.net_pnl
+          instrMap[k].count++
+          if (t.net_pnl > 0) instrMap[k].wins++
+        })
+        const instrStats = Object.entries(instrMap)
+          .map(([instr, v]) => ({instr, pnl:parseFloat(v.pnl.toFixed(2)), wr:parseFloat((v.wins/v.count*100).toFixed(1)), count:v.count}))
+          .sort((a,b) => b.pnl - a.pnl)
+        const maxAbs = Math.max(...instrStats.map(i=>Math.abs(i.pnl)), 1)
+        return (
+          <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:'14px 18px'}}>
+            <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--accent)',textTransform:'uppercase',marginBottom:12}}>◈ Performance per strumento</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              {instrStats.map(({instr, pnl, wr, count}) => (
+                <div key={instr} style={{display:'grid',gridTemplateColumns:'90px 1fr 70px 55px',alignItems:'center',gap:10}}>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:12,color:'var(--text-0)',fontWeight:600}}>{instr}</div>
+                  <div style={{background:'var(--bg-3)',borderRadius:4,height:8,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:`${Math.abs(pnl)/maxAbs*100}%`,background:pnl>=0?'var(--green)':'var(--red)',borderRadius:4,marginLeft:pnl<0?`${(1-Math.abs(pnl)/maxAbs)*100}%`:'0'}}/>
+                  </div>
+                  <div style={{fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:pnl>=0?'var(--green)':'var(--red)',textAlign:'right'}}>{pnl>=0?'+':''}{pnl.toFixed(2)}</div>
+                  <div style={{fontSize:10,color:'var(--text-2)',textAlign:'right'}}>{wr}% WR<br/><span style={{fontSize:9}}>{count} trade</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
+
       {/* AI insight */}
       <div style={{background:'var(--bg-2)',border:'1px solid rgba(0,212,170,0.2)',borderRadius:12,padding:'14px 18px'}}>
         <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--accent)',textTransform:'uppercase',marginBottom:6}}>◈ Analisi automatica</div>
@@ -870,6 +903,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const [fileType] = useState<'trades'>('trades')
   const [filterDir, setFilterDir] = useState<'all'|'Long'|'Short'>('all')
   const [filterStrategy, setFilterStrategy] = useState('all')
+  const [sortDir, setSortDir] = useState<'desc'|'asc'>('desc') // desc = più recenti prima
   const fileRef = useRef<HTMLInputElement>(null)
 
   const allPerfStats = tradesHook ? tradesHook.perfReports : perfStats
@@ -890,11 +924,16 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
 
   useEffect(() => { if (accounts.length>0&&selectedAccounts.length===0) setSelectedAccounts([accounts[0]]) }, [accounts])
 
-  const filteredTrades = allTrades.filter((t:Trade) =>
-    (selectedAccounts.length===0||selectedAccounts.includes(t.account)) &&
-    (filterDir==='all'||t.direction===filterDir) &&
-    (filterStrategy==='all'||t.strategy===filterStrategy)
-  )
+  const filteredTrades = allTrades
+    .filter((t:Trade) =>
+      (selectedAccounts.length===0||selectedAccounts.includes(t.account)) &&
+      (filterDir==='all'||t.direction===filterDir) &&
+      (filterStrategy==='all'||t.strategy===filterStrategy)
+    )
+    .sort((a:Trade, b:Trade) => {
+      const parseD = (s:string) => { const m=s?.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})/); return m?new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`).getTime():new Date(s||'').getTime() }
+      return sortDir==='desc' ? parseD(b.entry_time)-parseD(a.entry_time) : parseD(a.entry_time)-parseD(b.entry_time)
+    })
   const strategies = ['all',...new Set(filteredTrades.map((t:Trade)=>t.strategy))]
   const currentPerfReport = selectedAccounts.length===1 ? allPerfStats[selectedAccounts[0]] : undefined
 
@@ -1075,7 +1114,14 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                   <button key={String(s)} onClick={()=>setFilterStrategy(s)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:filterStrategy===s?'rgba(245,166,35,0.15)':'transparent',color:filterStrategy===s?'var(--amber)':'var(--text-2)',cursor:'pointer',fontSize:11}}>{s==='all'?'Tutte':s}</button>
                 ))}
               </>}
-              <div style={{marginLeft:'auto',fontSize:11,color:'var(--text-2)'}}>{filteredTrades.length} trade</div>
+              <div style={{display:'flex',alignItems:'center',gap:8,marginLeft:'auto'}}>
+                <div style={{fontSize:11,color:'var(--text-2)'}}>{filteredTrades.length} trade</div>
+                <button onClick={()=>setSortDir(d=>d==='desc'?'asc':'desc')}
+                  title={sortDir==='desc'?'Più recenti prima (clicca per invertire)':'Più vecchi prima (clicca per invertire)'}
+                  style={{padding:'4px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg-3)',color:'var(--text-1)',cursor:'pointer',fontSize:11,fontFamily:'var(--font-mono)'}}>
+                  {sortDir==='desc'?'↓ Recenti':'↑ Vecchi'}
+                </button>
+              </div>
             </div>
           )}
 

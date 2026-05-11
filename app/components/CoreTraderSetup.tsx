@@ -54,6 +54,27 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     .map(r => `${r.ntAccount.trim()}=${r.displayName.trim()}`)
     .join(',')
 
+  // Carica mapping salvato da localStorage
+  const [savedAliases, setSavedAliases] = useState<AliasRow[]>([])
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('ad_account_aliases_' + userId)
+      if (saved) {
+        const parsed: AliasRow[] = JSON.parse(saved)
+        setSavedAliases(parsed)
+        setAliases(parsed.length > 0 ? parsed : [{ ntAccount: '', displayName: '' }])
+      }
+    } catch {}
+  }, [userId])
+
+  const saveAliases = () => {
+    const valid = aliases.filter(r => r.ntAccount.trim() && r.displayName.trim())
+    setSavedAliases(valid)
+    try { localStorage.setItem('ad_account_aliases_' + userId, JSON.stringify(valid)) } catch {}
+    setAliasesSaved(true)
+    setTimeout(() => setAliasesSaved(false), 2000)
+  }
+
   const maskedKey = (k: ApiKey) =>
     k.key.substring(0, 8) + '••••••••••••••••' + k.key.slice(-4)
 
@@ -194,6 +215,24 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
           {aliasString && (
             <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
               {aliasString}
+            </div>
+          )}
+          <button onClick={saveAliases}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: aliasesSaved ? 'var(--green-dim)' : 'var(--accent)', color: aliasesSaved ? 'var(--green)' : '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, width: 'fit-content' }}>
+            {aliasesSaved ? '✓ Mapping salvato' : '💾 Salva mapping'}
+          </button>
+          {savedAliases.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Mapping attivi</div>
+              <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+                {savedAliases.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--bg-3)', borderRadius: 6, padding: '5px 10px' }}>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)' }}>{r.ntAccount}</span>
+                    <span style={{ color: 'var(--accent)', fontSize: 11 }}>→</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-0)', fontWeight: 600 }}>{r.displayName}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
