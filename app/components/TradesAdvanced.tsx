@@ -105,7 +105,7 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
       // Gestisce formato data italiano: "09/04/2026 16:10:56"
       const parseDate = (s: string) => {
         const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/)
-        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`)
+        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]} ${m[4]}`) // spazio = ora locale, non UTC
         return new Date(s)
       }
       const d1 = parseDate(entryStr), d2 = parseDate(exitStr)
@@ -128,7 +128,7 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
         entry_price: pn(get(cols, ['entry price'])),
         exit_price: pn(get(cols, ['exit price'])),
         quantity: parseInt(get(cols, ['qty'])) || 1,
-        pnl, commission: comm, net_pnl: pnl - comm,
+        pnl: pnl + comm, commission: comm, net_pnl: pnl, // Profit CSV è già netto; pnl lordo = netto + comm
         mae: mae || undefined,
         mfe: mfe || undefined,
         emotion_tags: [], rule_followed: undefined, notes: '',
@@ -146,7 +146,7 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
       const ex = get(cols, ['e/x'])
       const parseDate = (s: string) => {
         const m = s.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2}:\d{2})/)
-        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`)
+        if (m) return new Date(`${m[3]}-${m[2]}-${m[1]} ${m[4]}`) // spazio = ora locale, non UTC
         return new Date(s)
       }
       const row = {
