@@ -69,6 +69,102 @@ function parseNinjaPerfReport(text: string): PerfReport | null {
   }
 }
 
+// ─── Parser IBKR Flex Query CSV ─────────────────────────────────────────────
+function isIBKRFormat(text: string): boolean {
+  return text.includes('Statement,Header') || text.includes('Dettaglio eseguiti') || text.includes('Trades,Header')
+}
+
+function parseIBKRTradeList(text: string, account: string): Trade[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const trades: Trade[] = []
+
+  // Trova righe "Dettaglio eseguiti" (IT) o "Trades" (EN)
+  const fillSection = 'Dettaglio eseguiti'
+  const fillRows = lines.filter(l => l.startsWith(fillSection + ',Data,'))
+
+  interface IBKRFill {
+    symbol: string; dt: string; qty: number; price: number
+    comm: number; pnlReal: number; currency: string; asset: string; code: string
+  }
+  const opens: IBKRFill[] = []
+
+  for (const line of fillRows) {
+    // Parsing CSV rispettando virgolette
+    const cols: string[] = []
+    let cur = '', inQ = false
+    for (const ch of line) {
+      if (ch === '"') { inQ = !inQ }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = '' }
+      else cur += ch
+    }
+    cols.push(cur.trim())
+
+    // cols: 0=sez, 1=Data, 2=Order, 3=asset, 4=currency, 5=symbol
+    //       6=datetime, 7=qty, 8=price_exec, 9=price_close
+    //       10=valore_noz, 11=comm, 12=base, 13=pnl_real, 14=pnl_mtm, 15=code
+    if (cols.length < 16) continue
+    const code     = cols[15].trim()
+    const symbol   = cols[5].trim()
+    const dtRaw    = cols[6].trim()
+    const qty      = parseFloat(cols[7]) || 0
+    const price    = parseFloat(cols[8]) || 0
+    const comm     = parseFloat(cols[11]) || 0
+    const pnlReal  = parseFloat(cols[13]) || 0
+    const currency = cols[4].trim()
+    const asset    = cols[3].trim()
+
+    // Normalizza data: "2026-05-01, 10:26:14" → "2026-05-01T10:26:14"
+    const dt = dtRaw.replace(/, /, 'T')
+
+    if (code === 'O') {
+      opens.push({ symbol, dt, qty, price, comm, pnlReal: 0, currency, asset, code })
+    } else if (code === 'C') {
+      // Accoppie con la prima apertura dello stesso simbolo
+      const entryIdx = opens.findIndex(o => o.symbol === symbol)
+      if (entryIdx >= 0) {
+        const entry = opens[entryIdx]
+        opens.splice(entryIdx, 1)
+        const direction: 'Long' | 'Short' = entry.qty > 0 ? 'Long' : 'Short'
+        const totalComm = Math.abs(entry.comm) + Math.abs(comm)
+        const netPnl    = parseFloat(pnlReal.toFixed(2))
+        const grossPnl  = parseFloat((pnlReal + totalComm).toFixed(2))
+        const dur = (() => {
+          try {
+            return Math.round((new Date(dt).getTime() - new Date(entry.dt).getTime()) / 60000)
+          } catch { return 0 }
+        })()
+        const ninja_id = `${account}-IBKR-${symbol}-${entry.dt.replace(/[^0-9]/g,'').slice(0,12)}`
+        trades.push({
+          id:           ninja_id,
+          ninja_id,
+          account,
+          instrument:   symbol,
+          direction,
+          strategy:     'Manual',
+          entry_time:   entry.dt,
+          exit_time:    dt,
+          entry_price:  entry.price,
+          exit_price:   price,
+          quantity:     Math.abs(entry.qty),
+          commission:   parseFloat(totalComm.toFixed(4)),
+          pnl:          grossPnl,
+          net_pnl:      netPnl,
+          duration_min: dur,
+          source:       'ibkr-csv',
+          emotion_tags: [],
+          notes:        '',
+          rule_followed: undefined,
+          setup_quality: undefined,
+          extra:        { currency, asset_type: asset },
+        })
+      }
+    }
+  }
+
+  return trades
+}
+
+
 function parseNinjaTradeList(text: string, account: string): Trade[] {
   const lines = text.split('\n').filter(l => l.trim())
   if (lines.length < 2) return []
@@ -953,9 +1049,15 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       setImporting(false)
       return
     }
-    const parsed = parseNinjaTradeList(text, accountName.trim())
+    // Auto-detection formato: IBKR o NinjaTrader
+    const isIBKR = isIBKRFormat(text)
+    const parsed = isIBKR
+      ? parseIBKRTradeList(text, accountName.trim())
+      : parseNinjaTradeList(text, accountName.trim())
     if (!parsed.length) {
-      setImportMsg('⚠ Nessun trade trovato. Assicurati di esportare da: NT8 → New → Trade Performance → scheda "Trades" → tasto destro → Export → CSV')
+      setImportMsg(isIBKR
+        ? '⚠ Nessun trade trovato nel file IBKR. Assicurati che il file contenga la sezione "Dettaglio eseguiti" con trade chiusi.'
+        : '⚠ Nessun trade trovato. Assicurati di esportare da: NT8 → New → Trade Performance → scheda "Trades" → tasto destro → Export → CSV')
       setImporting(false)
       return
     }
