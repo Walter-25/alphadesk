@@ -150,12 +150,8 @@ function parseIBKRTradeList(text: string, account: string): Trade[] {
           pnl:          grossPnl,
           net_pnl:      netPnl,
           duration_min: dur,
-          source:       'ibkr-csv',
           emotion_tags: [],
           notes:        '',
-          rule_followed: undefined,
-          setup_quality: undefined,
-          extra:        { currency, asset_type: asset },
         })
       }
     }
