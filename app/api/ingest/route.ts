@@ -80,37 +80,55 @@ export async function POST(req: NextRequest) {
         (new Date(exitTime).getTime() - new Date(entryTime).getTime()) / 60000
       ))
 
+      // Compatibile sia con AlphaDeskBridge v2.0 (nuovi nomi) che con CoreTrader (vecchi nomi)
+      const isV2 = !!t.trade_uid // bridge v2.0 invia sempre trade_uid
+      const direction = isV2
+        ? (t.direction || 'Long')
+        : ((t.market_position || '').toLowerCase() === 'short' ? 'Short' : 'Long')
+      const entryPrice  = parseFloat(isV2 ? t.entry_avg_price : t.entry_price) || 0
+      const exitPrice   = parseFloat(isV2 ? t.exit_avg_price  : t.exit_price)  || 0
+      const qty         = parseInt(isV2 ? t.entry_quantity : t.quantity) || 1
+      const pnl         = parseFloat(isV2 ? t.gross_pnl   : t.profit_gross) || 0
+      const comm        = parseFloat(isV2 ? t.commission_total : t.commission) || 0
+      const netPnl      = parseFloat(isV2 ? t.net_pnl      : t.profit_net) || 0
+      const ninjaId     = isV2
+        ? `bridge-${t.trade_uid}`
+        : `ct-${account}-${t.trade_number || Date.now()}`
+
       const trade = {
-        ninja_id: `ct-${account}-${t.trade_number || Date.now()}`,
+        ninja_id: ninjaId,
         user_id: userId,
         account,
         source: (body.source === 'AlphaDeskBridge' ? 'alphadesk_bridge' : 'coretrader_realtime'),
         instrument: t.instrument_base || t.instrument || 'N/A',
-        direction: (t.market_position || '').toLowerCase() === 'short' ? 'Short' : 'Long',
+        direction,
         entry_time: entryTime,
         exit_time: exitTime,
         duration_min: durMin,
-        entry_price: parseFloat(t.entry_price) || 0,
-        exit_price: parseFloat(t.exit_price) || 0,
-        quantity: parseInt(t.quantity) || 1,
-        pnl: parseFloat(t.profit_gross) || 0,
-        commission: parseFloat(t.commission) || 0,
-        net_pnl: parseFloat(t.profit_net) || 0,
+        entry_price: entryPrice,
+        exit_price: exitPrice,
+        quantity: qty,
+        pnl,
+        commission: comm,
+        net_pnl: netPnl,
         mae: parseFloat(t.mae_account_currency) || null,
         mfe: parseFloat(t.mfe_account_currency) || null,
         strategy: t.entry_name || 'Manual',
         emotion_tags: [],
         extra: {
+          trade_uid: t.trade_uid,
           profit_ticks: t.profit_ticks,
           profit_points: t.profit_points,
+          point_value: t.point_value || t.point_value,
+          tick_size: t.tick_size,
+          tick_value: t.tick_value,
+          executions_count: t.executions_count,
+          is_simulated: t.is_simulated,
+          // campi CoreTrader
           mae_ticks: t.mae_ticks,
           mfe_ticks: t.mfe_ticks,
           entry_efficiency: t.entry_efficiency,
           exit_efficiency: t.exit_efficiency,
-          total_efficiency: t.total_efficiency,
-          point_value: t.point_value,
-          tick_value: t.tick_value,
-          is_simulated: t.is_simulated,
         }
       }
 

@@ -1,4 +1,4 @@
-// AlphaDesk Bridge v1.2 — NinjaTrader 8 Add-On
+// AlphaDesk Bridge v2.0 — NinjaTrader 8 Add-On
 // Installazione:
 //   1. Copia in: Documenti\NinjaTrader 8\bin\Custom\AddOns\
 //   2. In NinjaTrader 8: NinjaScript Editor → F5 per compilare
@@ -52,10 +52,12 @@ namespace NinjaTrader.NinjaScript.AddOns
         private object                  lockObj     = new object();
         private System.Threading.Timer  retryTimer;
 
-        // ── Tracciamento posizioni per costruire trade completi ─────────────
-        // Quando position torna flat → trade completato
-        private Dictionary<string, PositionInfo> openPositions
-            = new Dictionary<string, PositionInfo>();
+        // ── Tracciamento posizioni v2.0 (position-driven, FIFO signed qty) ─────
+        private Dictionary<string, TradeAccumulator> accumulators
+            = new Dictionary<string, TradeAccumulator>();
+        private HashSet<string> sentTradeIds
+            = new HashSet<string>();
+        private object accLock = new object();
 
         // ── UI ──────────────────────────────────────────────────────────────
         private AlphaDeskWindow statusWindow;
@@ -85,7 +87,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     try
                     {
                         if (isConfigured) Subscribe();
-                        Log("AlphaDesk Bridge v1.2 pronto. Endpoint: " +
+                        Log("AlphaDesk Bridge v2.0 pronto. Endpoint: " +
                             (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
                     }
                     catch (Exception ex) { Log("Errore avvio: " + ex.Message); }
@@ -95,7 +97,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                 retryTimer = new System.Threading.Timer(RetryFailed, null,
                     TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-                Log("AlphaDesk Bridge v1.2 in caricamento...");
+                Log("AlphaDesk Bridge v2.0 in caricamento...");
             }
             else if (State == State.Terminated)
             {
@@ -242,123 +244,292 @@ namespace NinjaTrader.NinjaScript.AddOns
                 if (!isConfigured) return;
                 if (e.Execution == null) return;
 
-                Account account   = sender as Account;
+                Account account = sender as Account;
                 if (account == null) return;
 
                 Execution exec = e.Execution;
 
-                // Filtra trade simulati se richiesto
                 bool isSim = account.Connection != null &&
                              account.Connection.Options != null &&
                              account.Connection.Options.Mode == Mode.Simulation;
                 if (!sendSimulated && isSim) return;
 
-                string instrument = exec.Instrument != null
-                    ? exec.Instrument.FullName : "N/A";
-                string key = account.Name + "|" + instrument;
-                // Applica alias nome conto se configurato
-                string displayName = accountAlias.ContainsKey(account.Name)
-                    ? accountAlias[account.Name] : account.Name;
+                string instrument    = exec.Instrument != null ? exec.Instrument.FullName : "N/A";
+                string instrBase     = exec.Instrument != null ? exec.Instrument.MasterInstrument.Name : instrument;
+                string displayName   = accountAlias.ContainsKey(account.Name) ? accountAlias[account.Name] : account.Name;
+                double pointValue    = exec.Instrument != null ? exec.Instrument.MasterInstrument.PointValue : 1.0;
+                double tickSize      = exec.Instrument != null ? exec.Instrument.MasterInstrument.TickSize : 0.25;
 
                 if (debugMode)
                     Log("Execution: " + instrument + " " + exec.MarketPosition +
-                        " qty=" + exec.Quantity + " price=" + exec.Price);
+                        " qty=" + exec.Quantity + " price=" + exec.Price +
+                        " comm=" + exec.Commission + " id=" + exec.ExecutionId);
 
-                lock (lockObj)
-                {
-                    if (!openPositions.ContainsKey(key))
-                    {
-                        // Prima execution: apre la posizione
-                        openPositions[key] = new PositionInfo
-                        {
-                            Account       = account.Name,
-                            Instrument    = instrument,
-                            InstrumentBase = exec.Instrument != null
-                                ? exec.Instrument.MasterInstrument.Name : instrument,
-                            Direction     = exec.MarketPosition == MarketPosition.Long ? "Long" : "Short",
-                            EntryPrice    = exec.Price,
-                            EntryTime     = exec.Time,
-                            Quantity      = exec.Quantity,
-                            Commission    = exec.Commission,
-                            IsSim         = isSim,
-                            PointValue    = exec.Instrument != null
-                                ? exec.Instrument.MasterInstrument.PointValue : 1.0,
-                            TickSize      = exec.Instrument != null
-                                ? exec.Instrument.MasterInstrument.TickSize : 0.25,
-                        };
-                    }
-                    else
-                    {
-                        // Seconda execution (exit): chiude il trade
-                        PositionInfo pos = openPositions[key];
-                        openPositions.Remove(key);
-
-                        double exitPrice = exec.Price;
-                        double exitComm  = exec.Commission;
-                        int    duration  = (int)(exec.Time - pos.EntryTime).TotalMinutes;
-
-                        double profitPoints = pos.Direction == "Long"
-                            ? exitPrice - pos.EntryPrice
-                            : pos.EntryPrice - exitPrice;
-
-                        double pointValue = pos.PointValue;
-                        double profitGross = profitPoints * pointValue * pos.Quantity;
-                        double totalComm   = pos.Commission + exitComm;
-                        double profitNet   = profitGross - totalComm;
-
-                        double tickValue   = pointValue * pos.TickSize;
-                        double profitTicks = pos.TickSize > 0
-                            ? profitPoints / pos.TickSize : 0;
-
-                        // Costruisce JSON e invia
-                        var json = BuildJson(
-                            displayName, pos.InstrumentBase, pos.Instrument,
-                            pos.Direction, pos.Quantity, pos.IsSim,
-                            pos.EntryPrice, exitPrice,
-                            pos.EntryTime, exec.Time, duration,
-                            profitGross, profitNet, profitTicks, profitPoints,
-                            totalComm, pointValue, pos.TickSize, tickValue
-                        );
-
-                        System.Threading.ThreadPool.QueueUserWorkItem(
-                            _ => SendToAlphaDesk(json));
-                    }
-                }
+                ProcessExecution(
+                    account.Name, displayName, instrument, instrBase,
+                    exec, isSim, pointValue, tickSize);
             }
             catch (Exception ex) { Log("Errore OnExecutionUpdate: " + ex.Message); }
         }
 
-        private string BuildJson(
-            string account, string instrBase, string instr,
-            string direction, int qty, bool isSim,
-            double entryPrice, double exitPrice,
-            DateTime entryTime, DateTime exitTime, int durMin,
-            double profitGross, double profitNet, double profitTicks, double profitPoints,
-            double commission, double pointValue, double tickSize, double tickValue)
+        // ═══════════════════════════════════════════════════════════════════
+        //  PROCESS EXECUTION v2.0 — signed quantity, scale in/out, reverse
+        // ═══════════════════════════════════════════════════════════════════
+        private void ProcessExecution(
+            string accountName, string displayName,
+            string instrument, string instrBase,
+            Execution exec, bool isSim,
+            double pointValue, double tickSize)
+        {
+            string key = accountName + "|" + instrument;
+
+            // Signed qty: Long=positivo, Short=negativo
+            int signedQty = exec.MarketPosition == MarketPosition.Long
+                ? exec.Quantity : -exec.Quantity;
+
+            lock (accLock)
+            {
+                // ── Caso: nessun accumulator aperto → nuova posizione ─────────
+                if (!accumulators.ContainsKey(key))
+                {
+                    var acc = new TradeAccumulator
+                    {
+                        TradeUid          = accountName + "|" + instrument + "|" +
+                                            exec.Time.Ticks + "|" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                        Account           = accountName,
+                        DisplayAccount    = displayName,
+                        Instrument        = instrument,
+                        InstrumentBase    = instrBase,
+                        Direction         = exec.MarketPosition == MarketPosition.Long ? "Long" : "Short",
+                        NetQuantity       = signedQty,
+                        TotalEntryQuantity = exec.Quantity,
+                        TotalExitQuantity = 0,
+                        EntryValue        = exec.Price * exec.Quantity,
+                        ExitValue         = 0,
+                        EntryAveragePrice = exec.Price,
+                        ExitAveragePrice  = 0,
+                        TotalCommission   = Math.Abs(exec.Commission),
+                        PointValue        = pointValue,
+                        TickSize          = tickSize,
+                        TickValue         = pointValue * tickSize,
+                        IsSimulated       = isSim,
+                        EntryTime         = exec.Time,
+                        LastExecutionTime = exec.Time,
+                        ExitTime          = DateTime.MinValue,
+                    };
+                    acc.Executions.Add(new ExecutionSnapshot
+                    {
+                        ExecutionId = exec.ExecutionId,
+                        OrderId     = exec.Order != null ? exec.Order.OrderId : "",
+                        Side        = acc.Direction,
+                        Quantity    = exec.Quantity,
+                        Price       = exec.Price,
+                        Commission  = Math.Abs(exec.Commission),
+                        Time        = exec.Time,
+                    });
+                    accumulators[key] = acc;
+                    if (debugMode) Log("Accumulator creato: " + key + " dir=" + acc.Direction + " qty=" + signedQty);
+                    return;
+                }
+
+                // ── Accumulator esistente ─────────────────────────────────────
+                var cur = accumulators[key];
+                int prevNet = cur.NetQuantity;
+                int newNet  = prevNet + signedQty;
+
+                cur.LastExecutionTime = exec.Time;
+                cur.TotalCommission  += Math.Abs(exec.Commission);
+                cur.Executions.Add(new ExecutionSnapshot
+                {
+                    ExecutionId = exec.ExecutionId,
+                    OrderId     = exec.Order != null ? exec.Order.OrderId : "",
+                    Side        = exec.MarketPosition == MarketPosition.Long ? "Long" : "Short",
+                    Quantity    = exec.Quantity,
+                    Price       = exec.Price,
+                    Commission  = Math.Abs(exec.Commission),
+                    Time        = exec.Time,
+                });
+
+                bool isSameDir = (prevNet > 0 && signedQty > 0) || (prevNet < 0 && signedQty < 0);
+
+                if (isSameDir)
+                {
+                    // ── Scale In: aggiunge qty nella stessa direzione ─────────
+                    cur.NetQuantity       = newNet;
+                    cur.TotalEntryQuantity += exec.Quantity;
+                    cur.EntryValue        += exec.Price * exec.Quantity;
+                    cur.EntryAveragePrice  = cur.EntryValue / cur.TotalEntryQuantity;
+                    if (debugMode) Log("Scale in: " + key + " netQty=" + newNet);
+                }
+                else if (newNet != 0 && Math.Abs(newNet) < Math.Abs(prevNet))
+                {
+                    // ── Scale Out / Partial exit ──────────────────────────────
+                    cur.NetQuantity        = newNet;
+                    cur.TotalExitQuantity += exec.Quantity;
+                    cur.ExitValue         += exec.Price * exec.Quantity;
+                    cur.ExitAveragePrice   = cur.ExitValue / cur.TotalExitQuantity;
+                    cur.ExitTime           = exec.Time;
+                    if (debugMode) Log("Scale out parziale: " + key + " netQty=" + newNet);
+                }
+                else if (newNet == 0)
+                {
+                    // ── Posizione FLAT: trade completato ──────────────────────
+                    cur.NetQuantity        = 0;
+                    cur.TotalExitQuantity += exec.Quantity;
+                    cur.ExitValue         += exec.Price * exec.Quantity;
+                    cur.ExitAveragePrice   = cur.ExitValue / cur.TotalExitQuantity;
+                    cur.ExitTime           = exec.Time;
+
+                    if (debugMode) Log("Posizione flat: " + key + " → finalizing trade");
+
+                    var finalAcc = cur;
+                    accumulators.Remove(key);
+
+                    System.Threading.ThreadPool.QueueUserWorkItem(_ => FinalizeTrade(finalAcc));
+                }
+                else
+                {
+                    // ── Reverse position: split in due trade ──────────────────
+                    // Parte 1: chiude la posizione corrente
+                    int closingQty = Math.Abs(prevNet);
+                    var closingAcc = new TradeAccumulator
+                    {
+                        TradeUid          = cur.TradeUid,
+                        Account           = cur.Account,
+                        DisplayAccount    = cur.DisplayAccount,
+                        Instrument        = cur.Instrument,
+                        InstrumentBase    = cur.InstrumentBase,
+                        Direction         = cur.Direction,
+                        NetQuantity       = 0,
+                        TotalEntryQuantity = cur.TotalEntryQuantity,
+                        TotalExitQuantity = closingQty,
+                        EntryValue        = cur.EntryValue,
+                        ExitValue         = exec.Price * closingQty,
+                        EntryAveragePrice = cur.EntryAveragePrice,
+                        ExitAveragePrice  = exec.Price,
+                        TotalCommission   = cur.TotalCommission,
+                        PointValue        = cur.PointValue,
+                        TickSize          = cur.TickSize,
+                        TickValue         = cur.TickValue,
+                        IsSimulated       = cur.IsSimulated,
+                        EntryTime         = cur.EntryTime,
+                        ExitTime          = exec.Time,
+                        LastExecutionTime = exec.Time,
+                        Executions        = cur.Executions,
+                    };
+
+                    // Parte 2: apre nuova posizione nella direzione opposta
+                    int newOpenQty = Math.Abs(newNet);
+                    string newDir  = newNet > 0 ? "Long" : "Short";
+                    var newAcc = new TradeAccumulator
+                    {
+                        TradeUid          = cur.Account + "|" + cur.Instrument + "|" +
+                                            exec.Time.Ticks + "|" + Guid.NewGuid().ToString("N").Substring(0, 8),
+                        Account           = cur.Account,
+                        DisplayAccount    = cur.DisplayAccount,
+                        Instrument        = cur.Instrument,
+                        InstrumentBase    = cur.InstrumentBase,
+                        Direction         = newDir,
+                        NetQuantity       = newNet,
+                        TotalEntryQuantity = newOpenQty,
+                        TotalExitQuantity = 0,
+                        EntryValue        = exec.Price * newOpenQty,
+                        ExitValue         = 0,
+                        EntryAveragePrice = exec.Price,
+                        ExitAveragePrice  = 0,
+                        TotalCommission   = 0,
+                        PointValue        = cur.PointValue,
+                        TickSize          = cur.TickSize,
+                        TickValue         = cur.TickValue,
+                        IsSimulated       = cur.IsSimulated,
+                        EntryTime         = exec.Time,
+                        LastExecutionTime = exec.Time,
+                    };
+                    newAcc.Executions.Add(new ExecutionSnapshot
+                    {
+                        ExecutionId = exec.ExecutionId,
+                        Side        = newDir,
+                        Quantity    = newOpenQty,
+                        Price       = exec.Price,
+                        Commission  = 0,
+                        Time        = exec.Time,
+                    });
+
+                    accumulators[key] = newAcc;
+                    if (debugMode) Log("Reverse: chiudo " + closingAcc.Direction + " apro " + newDir);
+                    System.Threading.ThreadPool.QueueUserWorkItem(_ => FinalizeTrade(closingAcc));
+                }
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════════
+        //  FINALIZE TRADE
+        // ═══════════════════════════════════════════════════════════════════
+        private void FinalizeTrade(TradeAccumulator acc)
+        {
+            try
+            {
+                // Deduplicazione
+                lock (accLock)
+                {
+                    if (sentTradeIds.Contains(acc.TradeUid))
+                    {
+                        if (debugMode) Log("Deduplicato: " + acc.TradeUid);
+                        return;
+                    }
+                    sentTradeIds.Add(acc.TradeUid);
+                }
+
+                double profitPoints = acc.Direction == "Long"
+                    ? acc.ExitAveragePrice - acc.EntryAveragePrice
+                    : acc.EntryAveragePrice - acc.ExitAveragePrice;
+
+                int exitQty = acc.TotalExitQuantity > 0 ? acc.TotalExitQuantity : acc.TotalEntryQuantity;
+                double profitGross  = profitPoints * acc.PointValue * exitQty;
+                double profitNet    = profitGross - acc.TotalCommission;
+                double profitTicks  = acc.TickSize > 0 ? profitPoints / acc.TickSize : 0;
+                int    durationMin  = acc.ExitTime > acc.EntryTime
+                    ? (int)(acc.ExitTime - acc.EntryTime).TotalMinutes : 0;
+
+                string json = BuildTradeJson(acc, profitGross, profitNet, profitPoints, profitTicks, durationMin);
+                if (debugMode) Log("Trade finalizzato: " + acc.Direction + " " + acc.Instrument +
+                    " netPnl=" + Math.Round(profitNet, 2) + " comm=" + Math.Round(acc.TotalCommission, 2));
+
+                SendToAlphaDesk(json);
+            }
+            catch (Exception ex) { Log("Errore FinalizeTrade: " + ex.Message); }
+        }
+
+        private string BuildTradeJson(
+            TradeAccumulator acc,
+            double profitGross, double profitNet,
+            double profitPoints, double profitTicks, int durationMin)
         {
             var sb = new StringBuilder();
             sb.Append("{");
+            S(sb, "trade_uid",        acc.TradeUid);
             S(sb, "source",           "AlphaDeskBridge");
-            S(sb, "account",          account);
-            S(sb, "instrument",       instr);
-            S(sb, "instrument_base",  instrBase);
-            S(sb, "market_position",  direction);
-            N(sb, "quantity",         qty);
-            B(sb, "is_simulated",     isSim);
-            N(sb, "entry_price",      entryPrice);
-            N(sb, "exit_price",       exitPrice);
-            S(sb, "entry_time",       entryTime.ToString("yyyy-MM-ddTHH:mm:ss"));
-            S(sb, "exit_time",        exitTime.ToString("yyyy-MM-ddTHH:mm:ss"));
-            N(sb, "duration_min",     durMin);
-            N(sb, "profit_gross",     Math.Round(profitGross, 2));
-            N(sb, "profit_net",       Math.Round(profitNet, 2));
+            S(sb, "account",          acc.DisplayAccount);
+            S(sb, "instrument",       acc.Instrument);
+            S(sb, "instrument_base",  acc.InstrumentBase);
+            S(sb, "direction",        acc.Direction);
+            B(sb, "is_simulated",     acc.IsSimulated);
+            N(sb, "entry_avg_price",  Math.Round(acc.EntryAveragePrice, 4));
+            N(sb, "exit_avg_price",   Math.Round(acc.ExitAveragePrice, 4));
+            N(sb, "entry_quantity",   acc.TotalEntryQuantity);
+            N(sb, "exit_quantity",    acc.TotalExitQuantity > 0 ? acc.TotalExitQuantity : acc.TotalEntryQuantity);
+            S(sb, "entry_time",       acc.EntryTime.ToString("yyyy-MM-ddTHH:mm:ss"));
+            S(sb, "exit_time",        acc.ExitTime.ToString("yyyy-MM-ddTHH:mm:ss"));
+            N(sb, "duration_min",     durationMin);
+            N(sb, "gross_pnl",        Math.Round(profitGross, 2));
+            N(sb, "net_pnl",          Math.Round(profitNet, 2));
             N(sb, "profit_ticks",     Math.Round(profitTicks, 2));
             N(sb, "profit_points",    Math.Round(profitPoints, 4));
-            N(sb, "commission",       Math.Round(commission, 2));
-            N(sb, "point_value",      pointValue);
-            N(sb, "tick_size",        tickSize);
-            N(sb, "tick_value",       Math.Round(tickValue, 4));
-            // Rimuovi ultima virgola e chiudi
+            N(sb, "commission_total", Math.Round(acc.TotalCommission, 4));
+            N(sb, "point_value",      acc.PointValue);
+            N(sb, "tick_size",        acc.TickSize);
+            N(sb, "tick_value",       Math.Round(acc.TickValue, 4));
+            N(sb, "executions_count", acc.Executions.Count);
             string result = sb.ToString().TrimEnd(',') + "}";
             if (debugMode) Log("JSON: " + result);
             return result;
@@ -388,7 +559,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     req.ContentLength = data.Length;
                     req.Timeout       = 10000;
                     req.Headers.Add("X-API-Key", apiKey);
-                    req.UserAgent = "AlphaDeskBridge/1.2";
+                    req.UserAgent = "AlphaDeskBridge/2.0";
 
                     using (Stream s = req.GetRequestStream())
                         s.Write(data, 0, data.Length);
@@ -551,21 +722,55 @@ namespace NinjaTrader.NinjaScript.AddOns
             return m.Success ? int.Parse(m.Groups[1].Value) : def;
         }
 
-        private class PositionInfo
-        {
-            public string   Account;
-            public string   Instrument;
-            public string   InstrumentBase;
-            public string   Direction;
-            public double   EntryPrice;
-            public DateTime EntryTime;
-            public int      Quantity;
-            public double   Commission;
-            public bool     IsSim;
-            public double   PointValue;
-            public double   TickSize;
-        }
+    } // fine AlphaDeskBridge
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  DATA CLASSES v2.0
+    // ═══════════════════════════════════════════════════════════════════════
+    internal class TradeAccumulator
+    {
+        public string   TradeUid;
+        public string   Account;
+        public string   DisplayAccount;
+        public string   Instrument;
+        public string   InstrumentBase;
+        public string   Direction;
+
+        public int      NetQuantity;
+        public int      TotalEntryQuantity;
+        public int      TotalExitQuantity;
+
+        public double   EntryValue;
+        public double   ExitValue;
+        public double   EntryAveragePrice;
+        public double   ExitAveragePrice;
+
+        public double   TotalCommission;
+
+        public double   PointValue;
+        public double   TickSize;
+        public double   TickValue;
+
+        public bool     IsSimulated;
+
+        public DateTime EntryTime;
+        public DateTime ExitTime;
+        public DateTime LastExecutionTime;
+
+        public List<ExecutionSnapshot> Executions = new List<ExecutionSnapshot>();
     }
+
+    internal class ExecutionSnapshot
+    {
+        public string   ExecutionId;
+        public string   OrderId;
+        public string   Side;
+        public int      Quantity;
+        public double   Price;
+        public double   Commission;
+        public DateTime Time;
+    }
+    // (chiusura namespace rimossa — già chiusa sotto con AlphaDeskWindow)
 
     // ═══════════════════════════════════════════════════════════════════════
     //  FINESTRA UI WPF
