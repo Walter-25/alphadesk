@@ -11,6 +11,8 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [copied, setCopied]         = useState('')
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
   const [aliasesSaved, setAliasesSaved] = useState(false)
+  const [commMap, setCommMap]         = useState<{instrument: string; commission: string}[]>([{ instrument: '', commission: '' }])
+  const [commSaved, setCommSaved]     = useState(false)
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -66,6 +68,13 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         setAliases(parsed.length > 0 ? parsed : [{ ntAccount: '', displayName: '' }])
       }
     } catch {}
+    try {
+      const savedComm = localStorage.getItem('ad_commission_map_' + userId)
+      if (savedComm) {
+        const parsed = JSON.parse(savedComm)
+        setCommMap(parsed.length > 0 ? parsed : [{ instrument: '', commission: '' }])
+      }
+    } catch {}
   }, [userId])
 
   const saveAliases = () => {
@@ -75,6 +84,18 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     setAliasesSaved(true)
     setTimeout(() => setAliasesSaved(false), 2000)
   }
+
+  const saveCommMap = () => {
+    const valid = commMap.filter(r => r.instrument.trim() && r.commission.trim())
+    try { localStorage.setItem('ad_commission_map_' + userId, JSON.stringify(valid)) } catch {}
+    setCommSaved(true)
+    setTimeout(() => setCommSaved(false), 2000)
+  }
+
+  const commMapString = commMap
+    .filter(r => r.instrument.trim() && r.commission.trim())
+    .map(r => r.instrument.trim().toUpperCase() + '=' + r.commission.trim())
+    .join(',')
 
   const maskedKey = (k: ApiKey) =>
     k.key.substring(0, 8) + '••••••••••••••••' + k.key.slice(-4)
@@ -87,7 +108,8 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
       SendSimulated: true,
       Debug:         false,
       MaxRetries:    3,
-      AccountAlias:  aliasString || ''
+      AccountAlias:  aliasString || '',
+      CommissionMap: commMapString || ''
     }, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url  = URL.createObjectURL(blob)
@@ -268,6 +290,45 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {/* Step 4b: Commission Map */}
+      <div style={section}>
+        <div style={stepLabel}>Step 4b — Commissioni per strumento (opzionale)</div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Inserisci la commissione per contratto per ogni strumento. Usata solo se il tuo broker
+          non invia le commissioni automaticamente (es. Lucid, alcuni conti Tradovate prop).
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Strumento (es. NQ)</div>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Comm. per contratto ($)</div>
+            <div />
+          </div>
+          {commMap.map((row, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+              <input value={row.instrument} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, instrument: e.target.value } : r))}
+                placeholder="es. NQ" style={inp} />
+              <input value={row.commission} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, commission: e.target.value } : r))}
+                placeholder="es. 5.76" style={inp} />
+              <button onClick={() => setCommMap(m => m.filter((_, idx) => idx !== i))} disabled={commMap.length === 1}
+                style={{ padding: '4px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: commMap.length === 1 ? 'transparent' : 'var(--red-dim)', color: commMap.length === 1 ? 'var(--text-2)' : 'var(--red)', cursor: commMap.length === 1 ? 'default' : 'pointer', fontSize: 13 }}>✕</button>
+            </div>
+          ))}
+          <button onClick={() => setCommMap(m => [...m, { instrument: '', commission: '' }])}
+            style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11, textAlign: 'left' as const }}>
+            + Aggiungi strumento
+          </button>
+          {commMapString && (
+            <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
+              {commMapString}
+            </div>
+          )}
+          <button onClick={saveCommMap}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: commSaved ? 'var(--green-dim)' : 'var(--bg-3)', color: commSaved ? 'var(--green)' : 'var(--text-1)', fontWeight: 700, cursor: 'pointer', fontSize: 12, width: 'fit-content' }}>
+            {commSaved ? '✓ Salvato' : '💾 Salva commissioni'}
+          </button>
+        </div>
+      </div>
+
       {/* Step 5: Scarica config */}
       <div style={section}>
         <div style={stepLabel}>Step 5 — Scarica e installa il config</div>
@@ -284,7 +345,8 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   "SendSimulated": true,
   "Debug": false,
   "MaxRetries": 3,
-  "AccountAlias": "${aliasString || ''}"
+  "AccountAlias": "${aliasString || ''}",
+  "CommissionMap": "${commMapString || ''}"
 }`}
         </pre>
         <div style={{ fontSize: 10, color: 'var(--text-2)' }}>ℹ La chiave è mascherata nell&apos;anteprima — nel file scaricato sarà quella reale.</div>
