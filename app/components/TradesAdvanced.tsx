@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
          ReferenceLine, CartesianGrid, PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis } from 'recharts'
@@ -806,14 +806,14 @@ function TradeRow({ trade, onUpdate }: { trade: Trade; onUpdate: (id: string, u:
   return (
     <>
       <div onClick={() => setOpen(!open)}
-        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 105px 50px 50px 70px 70px 1fr',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:13,alignItems:'center',cursor:'pointer'}}
+        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 148px 50px 50px 70px 70px 1fr',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:13,alignItems:'center',cursor:'pointer'}}
         onMouseEnter={e => (e.currentTarget.style.background='var(--bg-3)')}
         onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
         <div style={{fontSize:10,color:'var(--text-2)'}}>{open?'▼':'▶'}</div>
         <div style={{fontWeight:500,color:'var(--text-0)'}}>{trade.instrument}</div>
         <div style={{fontSize:12,color:'var(--text-2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trade.strategy}</div>
         <div><span style={{display:'inline-block',padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:600,background:trade.direction==='Long'?'var(--green-dim)':'var(--red-dim)',color:trade.direction==='Long'?'var(--green)':'var(--red)'}}>{trade.direction}</span></div>
-        <div style={{fontSize:12,color:'var(--text-1)',fontFamily:'var(--font-mono)'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
+        <div style={{fontSize:12,color:'var(--text-1)',fontFamily:'var(--font-mono)',whiteSpace:'nowrap'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
         <div style={{fontSize:12,color:'var(--text-2)'}}>{trade.duration_min}m</div>
         <div style={{fontFamily:'var(--font-mono)',fontSize:12}}>{trade.quantity}</div>
         <div style={{fontFamily:'var(--font-mono)',fontWeight:700,color:pc(trade.net_pnl)}}>{trade.net_pnl>=0?'+':''}{trade.net_pnl.toFixed(2)}</div>
@@ -1228,7 +1228,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
           {tab==='calendar'&&<PnLCalendar trades={filteredTrades}/>}
           {tab==='list'&&(
             <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 105px 50px 50px 70px 70px 1fr',padding:'8px 14px',borderBottom:'1px solid var(--border)',fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+              <div style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 148px 50px 50px 70px 70px 1fr',padding:'8px 14px',borderBottom:'1px solid var(--border)',fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
                 <div></div><div>Strum.</div><div>Strategia</div><div>Dir.</div><div>Data</div><div>Durata</div><div>Qty</div><div>P&L</div><div>Net P&L</div><div>Tag</div>
               </div>
               <div style={{maxHeight:520,overflowY:'auto'}}>
