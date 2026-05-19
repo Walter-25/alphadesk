@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 import { useState, useEffect } from 'react'
 
 interface ApiKey { id: string; key: string; label: string; created_at: string }
@@ -11,8 +11,11 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [copied, setCopied]         = useState('')
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
   const [aliasesSaved, setAliasesSaved] = useState(false)
-  const [commMap, setCommMap]         = useState<{instrument: string; commission: string}[]>([{ instrument: '', commission: '' }])
-  const [commSaved, setCommSaved]     = useState(false)
+  const [commMap, setCommMap]           = useState<{instrument: string; commission: string}[]>([{ instrument: '', commission: '' }])
+  const [commSaved, setCommSaved]       = useState(false)
+  const [commLoading, setCommLoading]   = useState(false)   // caricamento iniziale da DB
+  const [commSaving, setCommSaving]     = useState(false)   // save button
+  const [commSaveError, setCommSaveError] = useState('')
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -68,13 +71,57 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         setAliases(parsed.length > 0 ? parsed : [{ ntAccount: '', displayName: '' }])
       }
     } catch {}
-    try {
-      const savedComm = localStorage.getItem('ad_commission_map_' + userId)
-      if (savedComm) {
-        const parsed = JSON.parse(savedComm)
-        setCommMap(parsed.length > 0 ? parsed : [{ instrument: '', commission: '' }])
+    // Commission map: DB first, localStorage come fallback offline
+    const loadCommissions = async () => {
+      setCommLoading(true)
+      try {
+        const res = await fetch(`/api/commission-settings?userId=${userId}`)
+        if (res.ok) {
+          const data = await res.json()
+          const rows = (data.settings || []).map(
+            (s: { instrument: string; commission: number }) => ({
+              instrument: s.instrument,
+              commission: String(s.commission),
+            })
+          )
+          if (rows.length > 0) {
+            setCommMap(rows)
+            // Aggiorna cache locale con i dati dal DB
+            try { localStorage.setItem('ad_commission_map_' + userId, JSON.stringify(rows)) } catch {}
+          } else {
+            // DB vuoto -> prova cache localStorage
+            try {
+              const cached = localStorage.getItem('ad_commission_map_' + userId)
+              if (cached) {
+                const parsed = JSON.parse(cached)
+                setCommMap(parsed.length > 0 ? parsed : [{ instrument: '', commission: '' }])
+              }
+            } catch {}
+          }
+        } else {
+          // HTTP error -> fallback localStorage
+          try {
+            const cached = localStorage.getItem('ad_commission_map_' + userId)
+            if (cached) {
+              const parsed = JSON.parse(cached)
+              setCommMap(parsed.length > 0 ? parsed : [{ instrument: '', commission: '' }])
+            }
+          } catch {}
+        }
+      } catch {
+        // Errore rete -> fallback localStorage
+        try {
+          const cached = localStorage.getItem('ad_commission_map_' + userId)
+          if (cached) {
+            const parsed = JSON.parse(cached)
+            setCommMap(parsed.length > 0 ? parsed : [{ instrument: '', commission: '' }])
+          }
+        } catch {}
+      } finally {
+        setCommLoading(false)
       }
-    } catch {}
+    }
+    loadCommissions()
   }, [userId])
 
   const saveAliases = () => {
@@ -85,11 +132,32 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     setTimeout(() => setAliasesSaved(false), 2000)
   }
 
-  const saveCommMap = () => {
+  const saveCommMap = async () => {
     const valid = commMap.filter(r => r.instrument.trim() && r.commission.trim())
+    // 1. localStorage immediato: cache offline disponibile subito
     try { localStorage.setItem('ad_commission_map_' + userId, JSON.stringify(valid)) } catch {}
-    setCommSaved(true)
-    setTimeout(() => setCommSaved(false), 2000)
+    // 2. Persisti su Supabase
+    setCommSaveError('')
+    setCommSaving(true)
+    try {
+      const res = await fetch('/api/commission-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, settings: valid }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Errore salvataggio')
+      setCommSaved(true)
+      setTimeout(() => setCommSaved(false), 2000)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Errore salvataggio commissioni'
+      setCommSaveError(msg)
+      // Mostra comunque saved: localStorage ha gia' funzionato
+      setCommSaved(true)
+      setTimeout(() => { setCommSaved(false); setCommSaveError('') }, 4000)
+    } finally {
+      setCommSaving(false)
+    }
   }
 
   const commMapString = commMap
@@ -322,10 +390,19 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
               {commMapString}
             </div>
           )}
-          <button onClick={saveCommMap}
-            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: commSaved ? 'var(--green-dim)' : 'var(--bg-3)', color: commSaved ? 'var(--green)' : 'var(--text-1)', fontWeight: 700, cursor: 'pointer', fontSize: 12, width: 'fit-content' }}>
-            {commSaved ? '✓ Salvato' : '💾 Salva commissioni'}
+          <button onClick={saveCommMap} disabled={commSaving}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none',
+              background: commSaved ? 'var(--green-dim)' : 'var(--bg-3)',
+              color: commSaved ? 'var(--green)' : commSaving ? 'var(--text-2)' : 'var(--text-1)',
+              fontWeight: 700, cursor: commSaving ? 'not-allowed' : 'pointer',
+              fontSize: 12, width: 'fit-content' }}>
+            {commSaving ? '⟳ Salvando...' : commSaved ? '✓ Salvato' : '💾 Salva commissioni'}
           </button>
+          {commSaveError && (
+            <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>
+              ⚠ {commSaveError} — impostazioni salvate in locale
+            </div>
+          )}
         </div>
       </div>
 

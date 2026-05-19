@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 // ─── ENDPOINT PROXY ────────────────────────────────────────────────────────────
@@ -63,6 +63,25 @@ export async function POST(req: NextRequest) {
     ? forwardToCoreTraders(body, coretradersKey)
     : Promise.resolve({ forwarded: false })
 
+  // ── Commission map per fallback (non bloccante) ──────────────────────────────
+  // Caricata dopo la risoluzione userId. Se la tabella non esiste ancora o il DB
+  // fallisce, userCommMap resta {} e il comportamento e' identico a prima.
+  let userCommMap: Record<string, number> = {}
+  if (userId) {
+    try {
+      const sbComm = admin()
+      const { data: commRows } = await sbComm
+        .from('commission_settings')
+        .select('instrument, commission')
+        .eq('user_id', userId)
+      for (const row of commRows ?? []) {
+        userCommMap[row.instrument.toUpperCase()] = Number(row.commission)
+      }
+    } catch {
+      // Silenzioso: userCommMap resta {} -> nessuna regressione
+    }
+  }
+
   // ── Salvataggio in AlphaDesk ────────────────────────────────────────────────
   let savedToAlphadesk = false
   if (userId) {
@@ -89,8 +108,18 @@ export async function POST(req: NextRequest) {
       const exitPrice   = parseFloat(isV2 ? t.exit_avg_price  : t.exit_price)  || 0
       const qty         = parseInt(isV2 ? t.entry_quantity : t.quantity) || 1
       const pnl         = parseFloat(isV2 ? t.gross_pnl   : t.profit_gross) || 0
-      const comm        = parseFloat(isV2 ? t.commission_total : t.commission) || 0
-      const netPnl      = parseFloat(isV2 ? t.net_pnl      : t.profit_net) || 0
+      const brokerComm   = parseFloat(isV2 ? t.commission_total : t.commission) || 0
+      const instrKey     = (t.instrument_base || t.instrument || '').toUpperCase()
+      const safeQty      = Number(qty) || 0
+      // Fallback: se broker invia 0 usa la tariffa manuale * safeQty
+      const comm = brokerComm > 0
+        ? brokerComm
+        : (userCommMap[instrKey] != null ? parseFloat((userCommMap[instrKey] * safeQty).toFixed(4)) : 0)
+      // net_pnl: usa quello del broker se aveva comm > 0, altrimenti ricalcola
+      const brokerNetPnl = parseFloat(isV2 ? t.net_pnl : t.profit_net) || 0
+      const netPnl = brokerComm > 0
+        ? brokerNetPnl
+        : parseFloat((pnl - comm).toFixed(2))
       const ninjaId     = isV2
         ? `bridge-${t.trade_uid}`
         : `ct-${account}-${t.trade_number || Date.now()}`
