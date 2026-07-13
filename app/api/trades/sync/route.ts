@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+import { adminClient as admin, getAuthedUser, canAccess } from '../../../lib/supabase-server'
 
 // Tradovate endpoints
 const TV_ENDPOINTS = {
@@ -87,6 +81,8 @@ async function tradovateContracts(endpoint: string, token: string, ids: number[]
 
 export async function POST(req: NextRequest) {
   const { userId, account, broker, config } = await req.json()
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
 
   const { data: syncData } = await sb.from('account_syncs')
@@ -232,6 +228,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const userId = searchParams.get('userId')
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const { data } = await sb.from('account_syncs').select('*').eq('user_id', userId || '')
   return NextResponse.json({ syncs: data || [] })

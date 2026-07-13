@@ -7,6 +7,7 @@ import TradingViewChart from './components/TradingViewChart'
 import EconomicCalendar from './components/EconomicCalendar'
 import TradesAdvanced from './components/TradesAdvanced'
 import SyncPanel from './components/SyncPanel'
+import ChangePasswordModal from './components/ChangePasswordModal'
 import { useTrades } from './lib/useTrades'
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
@@ -333,6 +334,7 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
   active: string; setActive: (s: string) => void; displayName: string
   initials: string; isAdmin: boolean; onLogout: () => void
 }) {
+  const [showPwdModal, setShowPwdModal] = useState(false)
   const nav = [
     { id: 'dashboard', label: 'Dashboard', icon: '◈' },
     { id: 'analisi', label: 'Analisi Mercati', icon: '◉' },
@@ -375,12 +377,16 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }}></span>
           LIVE — {new Date().toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}
         </div>
+        <button onClick={() => setShowPwdModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, marginBottom: 6 }}>
+          🔑 Cambia password
+        </button>
         <button onClick={onLogout} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 12, transition: 'all 0.15s' }}
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--red)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(255,77,109,0.3)' }}
           onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-2)'; (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)' }}>
           ⏻ Esci
         </button>
       </div>
+      {showPwdModal && <ChangePasswordModal onClose={() => setShowPwdModal(false)} />}
     </aside>
   )
 }

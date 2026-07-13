@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+import { adminClient as admin, getAuthedUser, canAccess } from '../../lib/supabase-server'
 
 function generateKey(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
@@ -17,6 +11,8 @@ function generateKey(): string {
 export async function POST(req: NextRequest) {
   const { userId, label } = await req.json()
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const key = generateKey()
   const { error } = await sb.from('api_keys').insert({ user_id: userId, key, label: label || 'NinjaTrader' })
@@ -27,6 +23,8 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const userId = searchParams.get('userId')
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const { data } = await sb.from('api_keys').select('id,key,label,created_at').eq('user_id', userId||'')
   return NextResponse.json({ keys: data || [] })
@@ -34,7 +32,14 @@ export async function GET(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const { id } = await req.json()
+  const authedUser = await getAuthedUser(req)
+  if (!authedUser) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
+  // Verifica che la key appartenga all'utente autenticato (o che sia admin)
+  const { data: existing } = await sb.from('api_keys').select('user_id').eq('id', id).single()
+  if (!existing || !canAccess(authedUser, existing.user_id)) {
+    return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
+  }
   await sb.from('api_keys').delete().eq('id', id)
   return NextResponse.json({ success: true })
 }

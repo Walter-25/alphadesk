@@ -1,5 +1,6 @@
 ﻿'use client'
 import { useState, useEffect } from 'react'
+import { authedFetch } from '../lib/supabase'
 
 interface ApiKey { id: string; key: string; label: string; created_at: string }
 interface AliasRow { ntAccount: string; displayName: string }
@@ -24,15 +25,15 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   useEffect(() => { loadKeys() }, [userId])
 
   const loadKeys = async () => {
-    const res  = await fetch(`/api/apikey?userId=${userId}`)
+    const res  = await authedFetch(`/api/apikey?userId=${userId}`)
     const data = await res.json()
     setKeys(data.keys || [])
   }
 
   const generateKey = async () => {
     setGenerating(true)
-    await fetch('/api/apikey', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    await authedFetch('/api/apikey', {
+      method: 'POST',
       body: JSON.stringify({ userId, label })
     })
     await loadKeys()
@@ -41,7 +42,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
 
   const deleteKey = async (id: string) => {
     if (!confirm('Eliminare questa API key? Il plugin AlphaDesk Bridge smetterà di funzionare.')) return
-    await fetch('/api/apikey', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) })
+    await authedFetch('/api/apikey', { method: 'DELETE', body: JSON.stringify({ id }) })
     loadKeys()
   }
 
@@ -75,7 +76,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     const loadCommissions = async () => {
       setCommLoading(true)
       try {
-        const res = await fetch(`/api/commission-settings?userId=${userId}`)
+        const res = await authedFetch(`/api/commission-settings?userId=${userId}`)
         if (res.ok) {
           const data = await res.json()
           const rows = (data.settings || []).map(
@@ -140,9 +141,8 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
     setCommSaveError('')
     setCommSaving(true)
     try {
-      const res = await fetch('/api/commission-settings', {
+      const res = await authedFetch('/api/commission-settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId, settings: valid }),
       })
       const data = await res.json()

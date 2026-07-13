@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from './supabase'
+import { supabase, authedFetch } from './supabase'
 
 export interface Trade {
   id: string; ninja_id?: string; account: string; strategy: string
@@ -57,7 +57,7 @@ export function useTrades(userId: string) {
       } catch {}
 
       // Carica da Supabase tramite API route (usa service role, bypassa RLS browser)
-      const tradesRes = await fetch(`/api/trades?userId=${userId}`)
+      const tradesRes = await authedFetch(`/api/trades?userId=${userId}`)
       const tradesJson = await tradesRes.json()
       const tradesData = tradesJson.trades || null
       const tradesError = tradesJson.error || null
@@ -128,9 +128,8 @@ export function useTrades(userId: string) {
     })
     // Prova a salvare su Supabase
     try {
-      const res = await fetch('/api/trades', {
+      const res = await authedFetch('/api/trades', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ trades: newTrades.map(t => ({ ...t, user_id: userId })), userId, account, source })
       })
       const result = await res.json()
@@ -143,9 +142,8 @@ export function useTrades(userId: string) {
 
   // Salva perf report in Supabase
   const savePerfReport = useCallback(async (account: string, stats: PerfReport, source = 'csv') => {
-    await fetch('/api/trades/perf', {
+    await authedFetch('/api/trades/perf', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, account, stats, source })
     })
     setPerfReports(prev => ({ ...prev, [account]: stats }))
@@ -199,9 +197,8 @@ export function useTrades(userId: string) {
 
   // Sync broker
   const syncBroker = useCallback(async (account: string, broker: string, config?: any) => {
-    const res = await fetch('/api/trades/sync', {
+    const res = await authedFetch('/api/trades/sync', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, account, broker, config })
     })
     const result = await res.json()

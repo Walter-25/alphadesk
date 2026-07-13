@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+import { adminClient as admin, getAuthedUser, canAccess } from '../../lib/supabase-server'
 
 // GET — carica trade per utente (tutti i conti o uno specifico)
 export async function GET(req: NextRequest) {
@@ -13,6 +7,8 @@ export async function GET(req: NextRequest) {
   const userId = searchParams.get('userId')
   const account = searchParams.get('account')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   let q = sb.from('trades').select('*').eq('user_id', userId).order('entry_time', { ascending: false })
   if (account) q = q.eq('account', account)
@@ -25,6 +21,8 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const { trades, userId, account, source } = await req.json()
   if (!userId || !trades?.length) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const rows = trades.map((t: any) => {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars

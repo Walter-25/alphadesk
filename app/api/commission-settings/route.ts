@@ -1,11 +1,5 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const admin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+import { adminClient as admin, getAuthedUser, canAccess } from '../../lib/supabase-server'
 
 // GET /api/commission-settings?userId=<uuid>
 // Ritorna le commissioni manuali per strumento dell'utente.
@@ -14,6 +8,8 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const userId = searchParams.get('userId')
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
 
   const sb = admin()
   const { data, error } = await sb
@@ -38,6 +34,8 @@ export async function POST(req: NextRequest) {
   const { userId, settings } = body
   if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
   if (!Array.isArray(settings)) return NextResponse.json({ error: 'settings must be an array' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
 
   // Filtra, normalizza, valida
   const rows = settings
