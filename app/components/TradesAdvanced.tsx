@@ -167,6 +167,41 @@ function parseNinjaTradeList(text: string, account: string): Trade[] {
   const sep = text.includes(';') ? ';' : ','
   const header = lines[0].replace(/\r/,'').split(sep).map(h => h.trim().toLowerCase().replace(/"/g,''))
 
+  // Formato compatto (es. export DeepTrade): Symbol;DT;Quantity;Entry;Exit;ProfitLoss
+  // Una riga per trade già chiuso: solo data (niente orario), Entry/Exit sono prezzi, nessuna colonna direzione.
+  const isCompact = header.includes('symbol') && header.includes('dt') && header.includes('quantity')
+    && header.includes('entry') && header.includes('exit') && header.some(h => h.includes('profit'))
+  if (isCompact) {
+    const iSymbol = header.indexOf('symbol'), iDate = header.indexOf('dt'), iQty = header.indexOf('quantity')
+    const iEntry = header.indexOf('entry'), iExit = header.indexOf('exit'), iPnl = header.findIndex(h => h.includes('profit'))
+    const trades: Trade[] = []
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].replace(/\r/,'').split(sep)
+      if (cols.length < header.length) continue
+      const symbol = cols[iSymbol]?.trim() || 'N/A'
+      const dateStr = cols[iDate]?.trim() || ''
+      const qty = parseInt(cols[iQty]) || 1
+      const entryPrice = parseFloat(cols[iEntry]) || 0
+      const exitPrice = parseFloat(cols[iExit]) || 0
+      const pnl = parseFloat(cols[iPnl]) || 0
+      // Nessuna colonna direzione: la deduciamo dal segno del movimento prezzo vs segno del P&L
+      const priceMove = exitPrice - entryPrice
+      const direction: 'Long' | 'Short' = (priceMove >= 0) === (pnl >= 0) ? 'Long' : 'Short'
+      // Solo data disponibile (niente orario) — mezzogiorno come orario di default
+      const d = new Date(`${dateStr}T12:00:00`)
+      const iso = isNaN(d.getTime()) ? dateStr : d.toISOString()
+      trades.push({
+        id: `${account}-${i}`, ninja_id: `${account}-CD-${symbol}-${dateStr}-${i}`, account,
+        strategy: 'Manual', instrument: symbol, direction,
+        entry_time: iso, exit_time: iso, duration_min: 0,
+        entry_price: entryPrice, exit_price: exitPrice, quantity: qty,
+        pnl, commission: 0, net_pnl: pnl,
+        emotion_tags: [], rule_followed: undefined, notes: '',
+      })
+    }
+    return trades
+  }
+
   // Detect formato: Trades vs Executions vs altro
   const isNTTrades = header.includes('trade number') || header.includes('entry time')
   const isNTExec = header.includes('action') && header.includes('e/x')
