@@ -132,8 +132,7 @@ function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?
           <div style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', marginTop: 4, textTransform: 'capitalize' }}>{today}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => sa('revisione')} style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: 'pointer', fontSize: 12 }}>+ Nuova sessione</button>
-          <button onClick={() => sa('playbook')} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Apri Playbook</button>
+          <button onClick={() => sa('eseguiti')} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#000', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Vai a Eseguiti</button>
         </div>
       </div>
 
@@ -141,21 +140,6 @@ function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?
       {tradesHook && <TradingKPI tradesHook={tradesHook} setActive={sa} />}
 
 
-
-      {/* VIX + indici */}
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16 }}>
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 14 }}>Volatilità</div>
-          <VixGauge value={17.8} label="VIX" />
-          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bg-3)', borderRadius: 8 }}>
-            <div style={{ fontSize: 11, color: 'var(--text-1)', lineHeight: 1.5 }}>VIX <span style={{ color: '#00d4aa', fontFamily: 'var(--font-mono)' }}>17.8</span> — condizioni normali, livelli tecnici affidabili.</div>
-          </div>
-        </div>
-        <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 18 }}>
-          <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 12 }}>Calendario economico</div>
-          {NEWS_EVENTS.slice(0, 4).map((e, i) => <NewsRow key={i} ev={e} />)}
-        </div>
-      </div>
 
       {/* AI insight */}
       <div style={{ background: 'var(--bg-2)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 12, padding: '18px 20px' }}>
@@ -337,13 +321,8 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
   const [showPwdModal, setShowPwdModal] = useState(false)
   const nav = [
     { id: 'dashboard', label: 'Dashboard', icon: '◈' },
-    { id: 'analisi', label: 'Analisi Mercati', icon: '◉' },
-    { id: 'playbook', label: 'Playbook', icon: '◎' },
-    { id: 'revisione', label: 'Revisione', icon: '◐' },
     { id: 'eseguiti', label: 'Eseguiti', icon: '◑' },
     { id: 'operativita', label: 'Operatività', icon: '◐' },
-    { id: 'sistemi', label: 'Sistemi Auto', icon: '◒' },
-    { id: 'journal', label: 'Journal', icon: '○' },
   ]
   return (
     <aside style={{ width: 220, background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 100 }}>
@@ -441,13 +420,8 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
 
   const pages: Record<string, React.ReactNode> = {
     dashboard: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
-    analisi: <PageAnalisi />,
-    playbook: <PagePlaybook />,
-    revisione: <PageRevisione />,
     eseguiti: <TradesAdvanced userId={user.id} tradesHook={tradesHook} />,
     operativita: <PageOperativita tradesHook={tradesHook} />,
-    sistemi: <PageSistemi />,
-    journal: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
   }
 
