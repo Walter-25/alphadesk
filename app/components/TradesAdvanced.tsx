@@ -873,16 +873,22 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
 }
 
 // ─── TRADE ROW ESPANDIBILE ────────────────────────────────────────────────────
-function TradeRow({ trade, onUpdate }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void }) {
+function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void; knownStrategies?: string[] }) {
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<string[]>(trade.emotion_tags || [])
   const [rule, setRule] = useState<boolean|undefined>(trade.rule_followed)
   const [notes, setNotes] = useState(trade.notes || '')
   const [quality, setQuality] = useState(trade.setup_quality || 0)
+  const [strategy, setStrategy] = useState(trade.strategy || '')
 
   const toggleTag = (id: string) => { const n = tags.includes(id)?tags.filter(t=>t!==id):[...tags,id]; setTags(n); onUpdate(trade.id,{emotion_tags:n}) }
   const setR = (v: boolean) => { setRule(v); onUpdate(trade.id,{rule_followed:v}) }
   const setQ = (v: number) => { setQuality(v); onUpdate(trade.id,{setup_quality:v}) }
+  const saveStrategy = () => {
+    const v = strategy.trim() || 'Manual'
+    if (v !== trade.strategy) onUpdate(trade.id, { strategy: v })
+    setStrategy(v)
+  }
 
   return (
     <>
@@ -921,6 +927,15 @@ function TradeRow({ trade, onUpdate }: { trade: Trade; onUpdate: (id: string, u:
               </div>
             </div>
             <div>
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:10,letterSpacing:'0.06em'}}>Strategia</div>
+              <input list={`strat-${trade.id}`} value={strategy} onChange={e=>setStrategy(e.target.value)} onBlur={saveStrategy}
+                onKeyDown={e=>{ if(e.key==='Enter') (e.target as HTMLInputElement).blur() }}
+                placeholder="es. Breakout apertura"
+                style={{width:'100%',padding:'6px 10px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:7,color:'var(--text-0)',fontSize:12,outline:'none',fontFamily:'var(--font-body)',marginBottom:14}}/>
+              <datalist id={`strat-${trade.id}`}>
+                {knownStrategies.filter(s=>s&&s!=='all').map(s => <option key={s} value={s}/>)}
+              </datalist>
+
               <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:10,letterSpacing:'0.06em'}}>Regole rispettate</div>
               <div style={{display:'flex',gap:6,marginBottom:14}}>
                 <button onClick={()=>setR(true)} style={{flex:1,padding:'7px',borderRadius:7,border:`1px solid ${rule===true?'var(--green)':'var(--border)'}`,background:rule===true?'var(--green-dim)':'transparent',color:rule===true?'var(--green)':'var(--text-2)',cursor:'pointer',fontSize:12,fontWeight:600}}>✓ Sì</button>
@@ -1073,6 +1088,9 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const [importing, setImporting] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [accountName, setAccountName] = useState('')
+  // Strategia predefinita: applicata agli import quando il file non porta una strategia propria.
+  // Utile a chi opera con una sola strategia e non vuole ritaggare ogni trade a mano.
+  const [defaultStrategy, setDefaultStrategy] = useState('')
   const [fileType] = useState<'trades'>('trades')
   const [filterDir, setFilterDir] = useState<'all'|'Long'|'Short'>('all')
   const [filterStrategy, setFilterStrategy] = useState('all')
@@ -1092,6 +1110,8 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       if (lt) setTrades(JSON.parse(lt))
       const lp = localStorage.getItem('ad_perf_' + key)
       if (lp) setPerfStats(JSON.parse(lp))
+      const ds = localStorage.getItem('ad_strategy_' + key)
+      if (ds) setDefaultStrategy(ds)
     } catch {}
   }, [userId])
 
@@ -1107,7 +1127,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       const parseD = (s:string) => { const m=s?.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}:\d{2})/); return m?new Date(`${m[3]}-${m[2]}-${m[1]}T${m[4]}`).getTime():new Date(s||'').getTime() }
       return sortDir==='desc' ? parseD(b.entry_time)-parseD(a.entry_time) : parseD(a.entry_time)-parseD(b.entry_time)
     })
-  const strategies = ['all',...new Set(filteredTrades.map((t:Trade)=>t.strategy))]
+  const strategies: string[] = ['all', ...Array.from(new Set<string>(filteredTrades.map((t:Trade)=>t.strategy)))]
   const currentPerfReport = selectedAccounts.length===1 ? allPerfStats[selectedAccounts[0]] : undefined
 
   const updateTrade = useCallback(async (id: string, updates: Partial<Trade>) => {
@@ -1139,9 +1159,16 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       return
     }
     const existing = new Map(allTrades.filter((t:Trade)=>t.account===accountName.trim()).map((t:Trade)=>[t.ninja_id||t.id,t]))
+    const ds = defaultStrategy.trim()
     const merged = parsed.map(t => {
       const old = existing.get(t.ninja_id||t.id)
-      return old ? {...t, emotion_tags:(old as any).emotion_tags, rule_followed:(old as any).rule_followed, notes:(old as any).notes, setup_quality:(old as any).setup_quality} : t
+      // La strategia predefinita si applica solo quando il file non ne porta una propria
+      // (i parser mettono 'Manual' come segnaposto). Non sovrascrive mai una strategia reale.
+      const withStrategy = (ds && t.strategy === 'Manual') ? {...t, strategy: ds} : t
+      // Un reimport non deve cancellare il lavoro manuale già fatto sul trade
+      return old
+        ? {...withStrategy, strategy:(old as any).strategy || withStrategy.strategy, emotion_tags:(old as any).emotion_tags, rule_followed:(old as any).rule_followed, notes:(old as any).notes, setup_quality:(old as any).setup_quality}
+        : withStrategy
     })
     // Salva SEMPRE su localStorage come backup immediato
     const localUpdated = [...(tradesHook ? tradesHook.trades : trades).filter((t:Trade)=>t.account!==accountName.trim()),...merged]
@@ -1161,7 +1188,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     setSelectedAccounts([accountName.trim()])
     setImporting(false)
     if (fileRef.current) fileRef.current.value=''
-  }, [accountName, fileType, allTrades, tradesHook])
+  }, [accountName, fileType, allTrades, tradesHook, defaultStrategy])
 
   const lsKey = (type: string) => 'ad_' + type + '_' + (userId || 'guest')
   const lsSave = (type: string, data: any) => { try { localStorage.setItem(lsKey(type), JSON.stringify(data)) } catch {} }
@@ -1181,6 +1208,12 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
             <div style={{fontSize:12,fontWeight:500,color:'var(--text-0)',marginBottom:10}}>📂 Import storico CSV</div>
             <input style={{...inp,width:'100%',marginBottom:10}} placeholder="Nome conto (es. Sim101, LucidProp)" value={accountName} onChange={e=>setAccountName(e.target.value)}/>
+            <input list="known-strategies" style={{...inp,width:'100%',marginBottom:4}} placeholder="Strategia predefinita (opzionale)" value={defaultStrategy}
+              onChange={e=>{ setDefaultStrategy(e.target.value); try { localStorage.setItem('ad_strategy_' + (userId||'guest'), e.target.value) } catch {} }}/>
+            <datalist id="known-strategies">
+              {[...new Set(allTrades.map((t:Trade)=>t.strategy))].filter((s:any)=>s&&s!=='Manual').map((s:any) => <option key={s} value={s}/>)}
+            </datalist>
+            <div style={{fontSize:10,color:'var(--text-2)',marginBottom:10,lineHeight:1.5}}>Applicata ai trade importati che non hanno già una strategia propria. Modificabile poi sul singolo trade.</div>
             <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
             <button onClick={()=>fileRef.current?.click()} disabled={importing||!accountName.trim()} style={{width:'100%',padding:'8px',background:accountName.trim()?'var(--accent)':'var(--bg-4)',border:'none',borderRadius:8,color:accountName.trim()?'#000':'var(--text-2)',fontSize:13,fontWeight:600,cursor:accountName.trim()?'pointer':'not-allowed'}}>
               {importing?'Importando...':'Seleziona file CSV'}
@@ -1315,7 +1348,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
               <div style={{maxHeight:520,overflowY:'auto'}}>
                 {filteredTrades.length===0
                   ?<div style={{padding:24,textAlign:'center',color:'var(--text-2)',fontSize:12}}>Importa la lista trade singoli per il dettaglio</div>
-                  :filteredTrades.map((t:Trade)=><TradeRow key={t.id} trade={t} onUpdate={updateTrade}/>)}
+                  :filteredTrades.map((t:Trade)=><TradeRow key={t.id} trade={t} onUpdate={updateTrade} knownStrategies={strategies}/>)}
               </div>
             </div>
           )}
