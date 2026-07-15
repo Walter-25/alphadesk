@@ -35,6 +35,67 @@ const SECTORS: SectorData[] = [
 const pctColor = (v: string|number) => { const n = typeof v === 'string' ? parseFloat(v) : v; return n > 0 ? '#00d4aa' : n < 0 ? '#ff4d6d' : '#8fa3b8' }
 const impactColor = (i: string) => i === 'high' ? '#ff4d6d' : i === 'medium' ? '#f5a623' : '#8fa3b8'
 
+// ─── ANALISI SETTIMANALE (Dashboard) ─────────────────────────────────────────
+// Finestra temporale: ultimi 7 giorni sui conti selezionati. Risponde a "com'è andata
+// questa settimana?" — la qualità strutturale del sistema sta in Eseguiti, la
+// psicologia in Operatività: qui NON si duplicano.
+const fmtMoney = (v: number, sign = true) => `${sign && v >= 0 ? '+' : ''}$${Math.abs(v).toFixed(2)}`
+
+function parseTradeDate(s: string): Date {
+  const m = s?.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+  if (m) return new Date(`${m[3]}-${m[2]}-${m[1]}`)
+  return new Date(s || '')
+}
+
+function generateWeeklyInsight(trades: any[]): string {
+  const now = Date.now(); const DAY = 24 * 60 * 60 * 1000
+  const age = (t: any) => { const d = parseTradeDate(t.entry_time).getTime(); return isNaN(d) ? null : now - d }
+  const last7 = trades.filter(t => { const a = age(t); return a != null && a <= 7 * DAY })
+  const prev7 = trades.filter(t => { const a = age(t); return a != null && a > 7 * DAY && a <= 14 * DAY })
+
+  if (last7.length === 0) return 'Nessun trade negli ultimi 7 giorni sui conti selezionati.'
+
+  const out: string[] = []
+  const pnl = last7.reduce((s, t) => s + t.net_pnl, 0)
+  const wins = last7.filter(t => t.net_pnl > 0).length
+  out.push(`${last7.length} trade negli ultimi 7 giorni · Net ${fmtMoney(pnl)} · Win rate ${(wins / last7.length * 100).toFixed(0)}%.`)
+
+  if (prev7.length > 0) {
+    const prevPnl = prev7.reduce((s, t) => s + t.net_pnl, 0)
+    const diff = pnl - prevPnl
+    out.push(`Settimana precedente: ${fmtMoney(prevPnl)} su ${prev7.length} trade — ${diff >= 0 ? 'in miglioramento' : 'in calo'} di ${fmtMoney(Math.abs(diff), false)}.`)
+  }
+
+  // Giorno migliore / peggiore
+  const byDay: Record<string, number> = {}
+  last7.forEach(t => {
+    const d = parseTradeDate(t.entry_time); if (isNaN(d.getTime())) return
+    const k = d.toLocaleDateString('it-IT', { weekday: 'long' })
+    byDay[k] = (byDay[k] || 0) + t.net_pnl
+  })
+  const days = Object.entries(byDay).sort((a, b) => b[1] - a[1])
+  if (days.length >= 2) {
+    const [bd, bv] = days[0], [wd, wv] = days[days.length - 1]
+    if (bv > 0 && wv < 0) out.push(`Giornata migliore ${bd} (${fmtMoney(bv)}), peggiore ${wd} (${fmtMoney(wv)}).`)
+  }
+
+  // Strumento migliore / peggiore
+  const byInstr: Record<string, number> = {}
+  last7.forEach(t => { const k = t.instrument || 'N/A'; byInstr[k] = (byInstr[k] || 0) + t.net_pnl })
+  const instr = Object.entries(byInstr).sort((a, b) => b[1] - a[1])
+  if (instr.length >= 2 && instr[0][1] > 0 && instr[instr.length - 1][1] < 0) {
+    out.push(`${instr[0][0]} è lo strumento più profittevole (${fmtMoney(instr[0][1])}), ${instr[instr.length - 1][0]} il più in perdita (${fmtMoney(instr[instr.length - 1][1])}).`)
+  }
+
+  // Perdite consecutive
+  let maxLoss = 0, cur = 0
+  const chrono = [...last7].sort((a, b) => parseTradeDate(a.entry_time).getTime() - parseTradeDate(b.entry_time).getTime())
+  chrono.forEach(t => { if (t.net_pnl < 0) { cur++; maxLoss = Math.max(maxLoss, cur) } else cur = 0 })
+  if (maxLoss >= 3) out.push(`⚠ Fino a ${maxLoss} perdite consecutive questa settimana — valuta uno stop dopo 2-3 loss di fila.`)
+
+  return out.join(' ')
+}
+
 // ─── SUB-COMPONENTI ──────────────────────────────────────────────────────────
 function NewsRow({ ev }: { ev: NewsEvent }) {
   const beat = ev.actual && ev.forecast && parseFloat(ev.actual) > parseFloat(ev.forecast)
@@ -116,6 +177,14 @@ function TradingKPI({ tradesHook, setActive }: { tradesHook: any; setActive: (s:
           </div>
         ))}
       </div>
+
+      {/* Pattern settimanale — calcolato sugli eseguiti reali dei conti selezionati */}
+      <div style={{ marginTop: 14, background: 'var(--bg-3)', border: '1px solid rgba(0,212,170,0.15)', borderRadius: 10, padding: '12px 14px' }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>◈ Pattern settimanale — ultimi 7 giorni</div>
+        <div style={{ fontSize: 12, color: 'var(--text-1)', lineHeight: 1.7 }}>
+          {generateWeeklyInsight((tradesHook.trades || []).filter((t: any) => selectedAccounts.length === 0 || selectedAccounts.includes(t.account)))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -138,19 +207,6 @@ function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?
 
       {/* Trading KPI da conti reali */}
       {tradesHook && <TradingKPI tradesHook={tradesHook} setActive={sa} />}
-
-
-
-      {/* AI insight */}
-      <div style={{ background: 'var(--bg-2)', border: '1px solid rgba(0,212,170,0.2)', borderRadius: 12, padding: '18px 20px' }}>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          <div style={{ width: 32, height: 32, borderRadius: 8, background: 'var(--accent-dim)', border: '1px solid rgba(0,212,170,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>◈</div>
-          <div>
-            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>AI — Pattern settimanale</div>
-            <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.7 }}>Le sessioni con oltre 7h di sonno mostrano win rate <span style={{ color: '#00d4aa', fontFamily: 'var(--font-mono)' }}>71%</span> vs <span style={{ color: '#ff4d6d', fontFamily: 'var(--font-mono)' }}>38%</span> con meno di 5h. Il secondo trade post-loss ha win rate del <span style={{ color: '#ff4d6d', fontFamily: 'var(--font-mono)' }}>28%</span> — valuta cooldown obbligatorio di 20 minuti.</div>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

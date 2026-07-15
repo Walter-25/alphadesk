@@ -453,9 +453,11 @@ function computeStatsFromTrades(trades: Trade[]): Partial<PerfReport> & { equity
     winRate: trades.length > 0 ? parseFloat((wins.length/trades.length*100).toFixed(1)) : 0,
     winTrades: wins.length, lossTrades: losses.length, totalTrades: trades.length,
     avgWin: parseFloat(avgWin.toFixed(2)), avgLoss: parseFloat(avgLoss.toFixed(2)),
-    rrRatio: avgLoss > 0 ? parseFloat((avgWin/avgLoss).toFixed(2)) : 0,
+    // Con zero trade in perdita R:R e Profit Factor NON sono definiti (divisione per zero):
+    // vanno a null, non a 0 — altrimenti verrebbero letti come "sotto 1" = sistema perdente.
+    rrRatio: avgLoss > 0 ? parseFloat((avgWin/avgLoss).toFixed(2)) : null,
     maxDrawdown: parseFloat(dd.toFixed(2)),
-    profitFactor: Math.abs(losses.reduce((s,t)=>s+t.net_pnl,0)) > 0 ? parseFloat((wins.reduce((s,t)=>s+t.net_pnl,0)/Math.abs(losses.reduce((s,t)=>s+t.net_pnl,0))).toFixed(2)) : 0,
+    profitFactor: Math.abs(losses.reduce((s,t)=>s+t.net_pnl,0)) > 0 ? parseFloat((wins.reduce((s,t)=>s+t.net_pnl,0)/Math.abs(losses.reduce((s,t)=>s+t.net_pnl,0))).toFixed(2)) : null,
     largestWin: wins.length > 0 ? Math.max(...wins.map(t=>t.net_pnl)) : 0,
     largestLoss: losses.length > 0 ? Math.min(...losses.map(t=>t.net_pnl)) : 0,
     avgTrade: parseFloat((totalPnl/Math.max(trades.length,1)).toFixed(2)),
@@ -468,15 +470,59 @@ function computeStatsFromTrades(trades: Trade[]): Partial<PerfReport> & { equity
   } as any
 }
 
-function generateInsight(s: Partial<PerfReport>): string {
+// Analisi automatica della QUALITÀ DEL SISTEMA sui dati importati (tutto lo storico filtrato).
+// Deliberatamente NON tratta: finestra settimanale (→ Dashboard) né psicologia (→ Operatività).
+function generateInsight(s: any): string {
+  const n = s.totalTrades || 0
+  if (!n) return 'Nessun trade da analizzare.'
+
   const ins: string[] = []
-  if (s.winRate! >= 50) ins.push(`Win rate ${s.winRate?.toFixed(1)}% — consistente.`)
-  else ins.push(`Win rate ${s.winRate?.toFixed(1)}% — sotto 50%. Con R:R attuale di ${s.rrRatio?.toFixed(2)} ${s.rrRatio! >= 1 ? 'sei comunque in positivo' : 'stai perdendo nel lungo periodo'}.`)
-  if (s.rrRatio! >= 1.5) ins.push(`R:R ${s.rrRatio?.toFixed(2)} ottimo.`)
-  else if (s.rrRatio! < 1) ins.push(`⚠ R:R ${s.rrRatio?.toFixed(2)} — considera di tagliare prima le perdite o lasciare correre di più i winner.`)
-  if (s.longStats!.netProfit > 0 && s.shortStats!.netProfit < 0) ins.push(`Long profittevole (${fmtUSD(s.longStats!.netProfit)}), Short in perdita (${fmtUSD(s.shortStats!.netProfit)}).`)
-  if (s.profitFactor! >= 1.5) ins.push(`Profit factor ${s.profitFactor?.toFixed(2)} — sistema robusto.`)
-  else if (s.profitFactor! < 1) ins.push(`⚠ Profit factor ${s.profitFactor?.toFixed(2)} — il sistema perde nel lungo periodo.`)
+  const net = s.totalNetProfit || 0
+  const wins = s.winTrades || 0
+  const losses = s.lossTrades || 0
+  const wr = s.winRate || 0
+  const pf = s.profitFactor   // null = nessuna perdita → non calcolabile
+  const rr = s.rrRatio        // null = nessuna perdita → non calcolabile
+
+  ins.push(`${n} trade · ${wins}W/${losses}L · Net ${fmtUSD(net)}.`)
+
+  if (n < 20) ins.push(`⚠ Campione ridotto: con meno di ~20 trade le metriche sotto sono indicative, non ancora statisticamente affidabili.`)
+
+  if (losses === 0) {
+    // Caso win rate 100%: PF e R:R non hanno un denominatore, non significa "sistema perdente"
+    ins.push(`Nessun trade in perdita finora: Profit Factor e R:R non sono calcolabili (servono perdite come termine di paragone). Il dato da tenere d'occhio ora è se la size è coerente e se stai chiudendo i winner troppo presto.`)
+  } else {
+    if (wr >= 50) {
+      ins.push(`Win rate ${wr.toFixed(1)}% — consistente.`)
+    } else if (rr != null && rr >= 1.5) {
+      ins.push(`Win rate ${wr.toFixed(1)}% sotto il 50%, ma con R:R ${rr.toFixed(2)} il sistema resta profittevole: è il profilo tipico di chi lascia correre i winner.`)
+    } else {
+      ins.push(`Win rate ${wr.toFixed(1)}% sotto il 50%${rr != null ? ` con R:R ${rr.toFixed(2)}` : ''} — combinazione fragile: servono vincite più grandi delle perdite per compensare.`)
+    }
+
+    if (pf != null) {
+      if (pf >= 1.5) ins.push(`Profit factor ${pf.toFixed(2)} — sistema robusto.`)
+      else if (pf >= 1) ins.push(`Profit factor ${pf.toFixed(2)} — profittevole ma con margine sottile: poche perdite grosse possono ribaltarlo.`)
+      else ins.push(`⚠ Profit factor ${pf.toFixed(2)} — le perdite superano i profitti.`)
+    }
+
+    if (rr != null && rr < 1 && wr < 60) {
+      ins.push(`R:R ${rr.toFixed(2)}: la perdita media supera il profitto medio — valuta di tagliare prima le perdite o lasciar correre di più i winner.`)
+    }
+  }
+
+  // Sbilanciamento direzionale (solo se operi davvero in entrambe le direzioni)
+  const L = s.longStats, S = s.shortStats
+  if (L?.trades > 0 && S?.trades > 0) {
+    if (L.netProfit > 0 && S.netProfit < 0) ins.push(`Long profittevole (${fmtUSD(L.netProfit)}) contro Short in perdita (${fmtUSD(S.netProfit)}) — valuta se il tuo edge sia solo sul lato Long.`)
+    else if (S.netProfit > 0 && L.netProfit < 0) ins.push(`Short profittevole (${fmtUSD(S.netProfit)}) contro Long in perdita (${fmtUSD(L.netProfit)}) — valuta se il tuo edge sia solo sul lato Short.`)
+  }
+
+  // Il percorso conta quanto il risultato
+  if (s.maxDrawdown > 0 && net > 0 && s.maxDrawdown > net) {
+    ins.push(`⚠ Max drawdown ${fmtUSD(s.maxDrawdown, false)} superiore al profitto netto — il percorso è stato più volatile del risultato finale.`)
+  }
+
   return ins.join(' ')
 }
 
@@ -592,8 +638,8 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
       <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10}}>
         {[
           {l:'Win Rate',v:`${(stats.winRate||0).toFixed(1)}%`,s:`${stats.winTrades||0}W/${stats.lossTrades||0}L`,c:(stats.winRate||0)>=50?'var(--green)':'var(--red)'},
-          {l:'Profit Factor',v:(stats.profitFactor||0).toFixed(2),s:(stats.profitFactor||0)>=1.5?'Ottimo':(stats.profitFactor||0)>=1?'Accettabile':'Negativo',c:(stats.profitFactor||0)>=1.5?'var(--green)':(stats.profitFactor||0)>=1?'var(--amber)':'var(--red)'},
-          {l:'R:R Ratio',v:(stats.rrRatio||0).toFixed(2),s:'Avg Win / Avg Loss',c:(stats.rrRatio||0)>=1?'var(--green)':'var(--amber)'},
+          {l:'Profit Factor',v:stats.profitFactor==null?'—':(stats.profitFactor).toFixed(2),s:stats.profitFactor==null?'Nessuna perdita':((stats.profitFactor)>=1.5?'Ottimo':(stats.profitFactor)>=1?'Accettabile':'Negativo'),c:stats.profitFactor==null?'var(--text-2)':((stats.profitFactor)>=1.5?'var(--green)':(stats.profitFactor)>=1?'var(--amber)':'var(--red)')},
+          {l:'R:R Ratio',v:stats.rrRatio==null?'—':(stats.rrRatio).toFixed(2),s:stats.rrRatio==null?'Nessuna perdita':'Avg Win / Avg Loss',c:stats.rrRatio==null?'var(--text-2)':((stats.rrRatio)>=1?'var(--green)':'var(--amber)')},
           {l:'Max Drawdown',v:fmtUSD(stats.maxDrawdown||0,false),s:'Peak to valley',c:'var(--red)'},
           {l:'Sharpe',v:(stats.sharpeRatio||0).toFixed(2)||'—',s:(stats.sharpeRatio||0)>=1?'Buono':'Da migliorare',c:(stats.sharpeRatio||0)>=1?'var(--green)':'var(--amber)'},
         ].map(k => (
