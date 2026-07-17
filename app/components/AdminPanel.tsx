@@ -21,17 +21,26 @@ export default function AdminPanel({ currentUser }: { currentUser: any }) {
     setLoading(false)
   }
   const deleteUser = async (userId: string, email: string) => {
-    if (!confirm(`Eliminare ${email}?`)) return
-    await authedFetch('/api/admin/delete-user', { method: 'POST', body: JSON.stringify({ userId }) }); loadUsers()
+    if (!confirm(`Eliminare ${email}? Verranno eliminati anche tutti i suoi trade e dati.`)) return
+    setError(''); setMessage('')
+    try {
+      const res = await authedFetch('/api/admin/delete-user', { method: 'POST', body: JSON.stringify({ userId }) })
+      let result: any = {}
+      try { result = await res.json() } catch { throw new Error(`Risposta non valida dal server (HTTP ${res.status})`) }
+      if (!res.ok) throw new Error(result.error || `Errore HTTP ${res.status}`)
+      setMessage(`Account ${email} eliminato con tutti i suoi dati`)
+    } catch (err: any) { setError(`Eliminazione fallita: ${err.message}`) }
+    loadUsers()
   }
   const resetPassword = async (email: string) => {
     setResetting(email); setError(''); setMessage('')
     try {
       const res = await authedFetch('/api/admin/reset-password', { method: 'POST', body: JSON.stringify({ email }) })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error || 'Errore')
+      let result: any = {}
+      try { result = await res.json() } catch { throw new Error(`Risposta non valida dal server (HTTP ${res.status}) — probabile versione del sito non aggiornata`) }
+      if (!res.ok) throw new Error(result.error || `Errore HTTP ${res.status}`)
       setMessage(`Email di reset password inviata a ${email}`)
-    } catch (err: any) { setError(err.message) }
+    } catch (err: any) { setError(`Reset fallito: ${err.message}`) }
     setResetting('')
   }
   const inp = { width:'100%',padding:'9px 12px',background:'var(--bg-3)',border:'1px solid var(--border)',borderRadius:8,color:'var(--text-0)',fontSize:13,outline:'none',fontFamily:'var(--font-body)' } as React.CSSProperties
