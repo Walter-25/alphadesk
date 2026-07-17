@@ -435,11 +435,17 @@ export default function App() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) { setUser(session.user); loadProfile(session.user.id) }
+      if (session?.user) {
+        if (session.user.user_metadata?.password_set !== true) { window.location.href = '/set-password'; return }
+        setUser(session.user); loadProfile(session.user.id)
+      }
       setAuthLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) { setUser(session.user); loadProfile(session.user.id) }
+      if (session?.user) {
+        if (session.user.user_metadata?.password_set !== true) { window.location.href = '/set-password'; return }
+        setUser(session.user); loadProfile(session.user.id)
+      }
       else { setUser(null); setProfile(null) }
     })
     return () => subscription.unsubscribe()

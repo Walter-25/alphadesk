@@ -64,7 +64,7 @@ export default function SetPasswordPage() {
     if (newPassword.length < 8) { setError('La password deve avere almeno 8 caratteri'); return }
     if (newPassword !== confirmPassword) { setError('Le password non coincidono'); return }
     setLoading(true)
-    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword })
+    const { error: updateError } = await supabase.auth.updateUser({ password: newPassword, data: { password_set: true, privacy_accepted_at: new Date().toISOString() } })
     setLoading(false)
     if (updateError) { setError(updateError.message); return }
     setStatus('success')
