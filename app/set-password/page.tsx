@@ -11,6 +11,7 @@ export default function SetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [privacyAccepted, setPrivacyAccepted] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -111,8 +112,8 @@ export default function SetPasswordPage() {
                   <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required minLength={8} placeholder="ripeti la password" style={inp} />
                 </div>
                 {error && <div style={{ padding: '10px 14px', background: 'var(--red-dim)', border: '1px solid rgba(255,77,109,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>{error}</div>}
-                <button type="submit" disabled={loading} style={{ padding: 11, background: loading ? 'rgba(0,212,170,0.5)' : 'var(--accent)', border: 'none', borderRadius: 8, color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}>{loading ? 'Salvataggio...' : 'Imposta password'}</button>
-                <div style={{ fontSize: 11, color: 'var(--text-2)', textAlign: 'center' }}>Impostando la password confermi di aver letto l'<a href="/privacy" style={{ color: 'var(--text-2)' }}>informativa privacy</a>.</div>
+                <button type="submit" disabled={loading || !privacyAccepted} style={{ padding: 11, background: loading ? 'rgba(0,212,170,0.5)' : 'var(--accent)', border: 'none', borderRadius: 8, color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 4, opacity: (loading || !privacyAccepted) ? 0.5 : 1 }}>{loading ? 'Salvataggio...' : 'Imposta password'}</button>
+                <label style={{display:'flex',alignItems:'flex-start',gap:8,fontSize:11,color:'var(--text-2)',cursor:'pointer'}}><input type="checkbox" checked={privacyAccepted} onChange={e=>setPrivacyAccepted(e.target.checked)} style={{marginTop:2,accentColor:'var(--accent)'}}/> <span>Ho letto e compreso l'<a href="/privacy" target="_blank" style={{color:'var(--accent)'}}>informativa privacy</a></span></label>
               </form>
             </>
           )}
