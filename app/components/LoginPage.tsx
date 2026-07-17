@@ -28,7 +28,7 @@ export default function LoginPage({ onLogin }: { onLogin: (user: any) => void })
           </form>
           <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--border)',fontSize:12,color:'var(--text-2)',textAlign:'center'}}>Non hai un account? Contatta l'amministratore.</div>
         </div>
-        <div style={{textAlign:'center',marginTop:20,fontSize:11,color:'var(--text-2)',fontFamily:"'DM Mono',monospace"}}>© 2026 AlphaDesk — Accesso riservato</div>
+        <div style={{textAlign:'center',marginTop:20,fontSize:11,color:'var(--text-2)',fontFamily:"'DM Mono',monospace"}}>© 2026 AlphaDesk — Accesso riservato · <a href="/privacy" style={{color:'var(--text-2)',textDecoration:'underline'}}>Privacy</a></div>
       </div>
     </div>
   )

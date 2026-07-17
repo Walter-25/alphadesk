@@ -112,6 +112,7 @@ export default function SetPasswordPage() {
                 </div>
                 {error && <div style={{ padding: '10px 14px', background: 'var(--red-dim)', border: '1px solid rgba(255,77,109,0.3)', borderRadius: 8, fontSize: 13, color: 'var(--red)' }}>{error}</div>}
                 <button type="submit" disabled={loading} style={{ padding: 11, background: loading ? 'rgba(0,212,170,0.5)' : 'var(--accent)', border: 'none', borderRadius: 8, color: '#000', fontSize: 14, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}>{loading ? 'Salvataggio...' : 'Imposta password'}</button>
+                <div style={{ fontSize: 11, color: 'var(--text-2)', textAlign: 'center' }}>Impostando la password confermi di aver letto l'<a href="/privacy" style={{ color: 'var(--text-2)' }}>informativa privacy</a>.</div>
               </form>
             </>
           )}
