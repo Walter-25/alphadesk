@@ -128,7 +128,7 @@ function global:Import-AlphaDeskCsvFile {
     $payload = @{
         apiKey  = $global:AlphaDeskApiKey
         account = $global:AlphaDeskAccount
-        csv     = $content
+        csv     = "$content"  # interpolazione = stringa pura: Get-Content decora la stringa con proprieta' ETS (PSPath ecc.) e ConvertTo-Json in PS 5.1 la serializzerebbe come oggetto
         source  = 'DeepCharts-Watcher'
     } | ConvertTo-Json
 
