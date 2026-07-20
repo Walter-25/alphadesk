@@ -6,6 +6,16 @@ const MAX_CSV_BYTES = 1024 * 1024 // 1MB
 
 // POST — import CSV via API key (AlphaDesk Watcher)
 export async function POST(req: NextRequest) {
+  try {
+    return await handlePost(req)
+  } catch (e: any) {
+    // Rete di sicurezza: mai un 500 muto — l'errore reale finisce nel body (e nei log)
+    console.error('ingest-csv error:', e)
+    return NextResponse.json({ error: `internal: ${e?.message || String(e)}` }, { status: 500 })
+  }
+}
+
+async function handlePost(req: NextRequest) {
   let body: any = {}
   try {
     body = await req.json()
