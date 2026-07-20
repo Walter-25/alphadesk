@@ -409,7 +409,7 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
     <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:40,textAlign:'center'}}>
       <div style={{fontSize:32,opacity:0.15,marginBottom:12}}>◑</div>
       <div style={{fontSize:14,color:'var(--text-1)'}}>Nessun dato disponibile</div>
-      <div style={{fontSize:12,color:'var(--text-2)',marginTop:6}}>Importa un Performance Report o una lista trade singoli</div>
+      <div style={{fontSize:12,color:'var(--text-2)',marginTop:6}}>Carica un export CSV della tua piattaforma — il formato viene riconosciuto automaticamente (NinjaTrader 8, IBKR, DeepCharts)</div>
     </div>
   )
 
@@ -891,6 +891,8 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const [filterDir, setFilterDir] = useState<'all'|'Long'|'Short'>('all')
   const [filterStrategy, setFilterStrategy] = useState('all')
   const [sortDir, setSortDir] = useState<'desc'|'asc'>('desc') // desc = più recenti prima
+  const [showExportGuide, setShowExportGuide] = useState(false)
+  const [expandedGuide, setExpandedGuide] = useState<string|null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const allPerfStats = tradesHook ? tradesHook.perfReports : perfStats
@@ -999,7 +1001,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
 
       {/* Import panel */}
       <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:18}}>
-        <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:14}}>Importa da NinjaTrader</div>
+        <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.06em',marginBottom:14}}>Import manuale CSV</div>
         <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
             <div style={{fontSize:12,fontWeight:500,color:'var(--text-0)',marginBottom:10}}>📂 Import storico CSV</div>
@@ -1014,14 +1016,32 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
             <button onClick={()=>fileRef.current?.click()} disabled={importing||!accountName.trim()} style={{width:'100%',padding:'8px',background:accountName.trim()?'var(--accent)':'var(--bg-4)',border:'none',borderRadius:8,color:accountName.trim()?'#000':'var(--text-2)',fontSize:13,fontWeight:600,cursor:accountName.trim()?'pointer':'not-allowed'}}>
               {importing?'Importando...':'Seleziona file CSV'}
             </button>
-            <div style={{fontSize:11,color:'var(--text-2)',marginTop:10,lineHeight:1.7,padding:'8px 10px',background:'var(--bg-2)',borderRadius:6}}>
-              <strong style={{color:'var(--text-0)'}}>Come esportare da NT8:</strong><br/>
-              New → Trade Performance → seleziona conto e periodo<br/>
-              → scheda <strong>"Trades"</strong> → tasto destro → <strong>Export → CSV</strong><br/>
-              <span style={{color:'var(--amber)'}}>⚠ Non usare "Performance" (Summary) — serve la lista trade singoli</span>
+            <div style={{marginTop:10}}>
+              <button onClick={()=>setShowExportGuide(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'8px 10px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text-1)',fontSize:11,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
+                <span>{showExportGuide?'▼':'▶'}</span> 📖 Come esportare il CSV dalla tua piattaforma
+              </button>
+              {showExportGuide && (
+                <div style={{marginTop:6,display:'flex',flexDirection:'column',gap:4}}>
+                  {[
+                    { id: 'nt8', label: 'NinjaTrader 8', text: 'Control Center → New → Trade Performance → seleziona conto e periodo → Generate → scheda Trades (o Executions) → tasto destro sulla tabella → Export → CSV.' },
+                    { id: 'deepcharts', label: 'DeepCharts', text: "Apri il report delle performance/eseguiti → Export CSV. Il file ha colonne Symbol;DT;Quantity;Entry;Exit;ProfitLoss. Suggerimento: con il Watcher attivo (vedi tab Sync) l'import avviene da solo appena il file arriva nei Download." },
+                    { id: 'atas', label: 'ATAS', text: "Statistiche → tabella eseguiti/trade → Export CSV. ⚠ Il formato ATAS non è ancora supportato dall'import: stiamo aggiungendo il parser — se hai un export di esempio, contatta l'amministratore per accelerare." },
+                  ].map(g => (
+                    <div key={g.id} style={{background:'var(--bg-2)',borderRadius:6,overflow:'hidden'}}>
+                      <button onClick={()=>setExpandedGuide(p=>p===g.id?null:g.id)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'6px 10px',background:'transparent',border:'none',color:'var(--text-1)',fontSize:11,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
+                        <span>{expandedGuide===g.id?'▼':'▶'}</span> {g.label}
+                      </button>
+                      {expandedGuide===g.id && (
+                        <div style={{padding:'0 10px 8px 26px',fontSize:11,color:'var(--text-2)',lineHeight:1.6}}>{g.text}</div>
+                      )}
+                    </div>
+                  ))}
+                  <div style={{fontSize:10,color:'var(--text-2)',padding:'4px 10px',fontStyle:'italic'}}>I percorsi possono variare leggermente con gli aggiornamenti delle piattaforme.</div>
+                </div>
+              )}
             </div>
             <div style={{marginTop:8,fontSize:11,color:'var(--text-2)',padding:'6px 10px',background:'var(--bg-2)',borderRadius:6}}>
-              💡 Con <strong>AlphaDesk Bridge</strong> (Sync → NinjaTrader) il nome conto viene letto automaticamente da NT8 — non serve importare il CSV.
+              💡 Usi NinjaTrader 8 o DeepCharts? Nella tab Sync trovi il Bridge e il Watcher per l'import automatico.
             </div>
           </div>
           <div style={{background:'var(--bg-3)',borderRadius:10,padding:14}}>
@@ -1078,7 +1098,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
       {accounts.length===0 && tab !== 'sync' ? (
         <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:48,textAlign:'center'}}>
           <div style={{fontSize:40,opacity:0.15,marginBottom:14}}>◑</div>
-          <div style={{fontSize:14,color:'var(--text-1)',marginBottom:6}}>Importa i tuoi dati NinjaTrader per iniziare</div>
+          <div style={{fontSize:14,color:'var(--text-1)',marginBottom:6}}>Importa i tuoi trade per iniziare</div>
           <div style={{fontSize:12,color:'var(--text-2)',lineHeight:1.7,marginBottom:14}}>Lista Trade singoli → equity curve, calendario, tag emotivi</div>
           <button onClick={()=>setTab('sync')} style={{padding:'8px 18px',background:'var(--accent)',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:600,cursor:'pointer'}}>⚡ Oppure configura il plugin AlphaDesk Bridge →</button>
         </div>

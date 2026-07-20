@@ -19,7 +19,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
   const [showConfig, setShowConfig] = useState(false)
   const [config, setConfig] = useState({
     url: 'http://localhost:36973', flexToken: '', queryId: '',
-    accessToken: '', tvUser: '', tvPass: ''
+    accessToken: ''
   })
 
   const inp = {
@@ -43,22 +43,26 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
   }
 
   const BROKERS = [
-    { id: 'ninjatrader', label: 'NinjaTrader 8', icon: '⚡', color: '#f5a623', desc: 'Plugin AlphaDesk Bridge' },
-    { id: 'tradovate', label: 'Tradovate Live', icon: '📊', color: '#00d4aa', desc: 'Conto live reale' },
-    { id: 'tradovate_prop', label: 'Tradovate Prop', icon: '🏆', color: '#4da6ff', desc: 'Prop / Simulazione' },
-    { id: 'interactive_brokers', label: 'Interactive Brokers', icon: '🏦', color: '#9b59b6', desc: 'TWS FlexQuery API' },
-    { id: 'rithmic', label: 'Rithmic / AMP', icon: '🔌', color: '#4a6278', desc: 'Prossimamente' },
-    { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Prossimamente' },
+    { id: 'ninjatrader', label: 'NinjaTrader 8', icon: '⚡', color: '#f5a623', desc: 'Bridge — tempo reale' },
+    { id: 'watcher', label: 'Watcher CSV', icon: '📄', color: '#00d4aa', desc: 'DeepCharts — semi-automatico' },
+    { id: 'interactive_brokers', label: 'Interactive Brokers', icon: '🏦', color: '#9b59b6', desc: 'FlexQuery — non ancora collaudato' },
+    { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Bridge in valutazione' },
   ]
 
-  const isDisabled = (id: string) => id === 'rithmic' || id === 'atas'
+  const isDisabled = (id: string) => id === 'atas'
   const lastSync = (acc: string) => syncs.find(s => s.account === acc)
+  const showBridgeSetup = selectedBroker === 'ninjatrader' || selectedBroker === 'watcher'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* ── NinjaTrader: mostra setup Bridge senza chiedere il conto ── */}
-      {selectedBroker === 'ninjatrader' && (
+      {/* Modi per portare i trade in AlphaDesk */}
+      <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, padding: '10px 14px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+        Modi per portare i trade in AlphaDesk: ⚡ Bridge NT8 (tempo reale, automatico) · 📄 Watcher CSV (semi-automatico, oggi DeepCharts) · 🏦 IBKR FlexQuery · 📥 import manuale dalla tab Import. Questa lista cresce man mano che aggiungiamo integrazioni.
+      </div>
+
+      {/* ── NinjaTrader / Watcher: mostra setup senza chiedere il conto ── */}
+      {showBridgeSetup && (
         <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16 }}>
           {/* Lista broker */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -81,10 +85,10 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
             ))}
           </div>
 
-          {/* Setup AlphaDesk Bridge */}
+          {/* Setup AlphaDesk Bridge / Watcher */}
           <div>
             {userId
-              ? <AlphaDeskBridgeSetup userId={userId} />
+              ? <AlphaDeskBridgeSetup userId={userId} mode={selectedBroker === 'ninjatrader' ? 'nt8' : 'watcher'} />
               : <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>
                   Effettua il login per configurare il plugin.
                 </div>
@@ -94,7 +98,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
       )}
 
       {/* ── Altri broker: mostra select conto + config ── */}
-      {selectedBroker !== 'ninjatrader' && (
+      {!showBridgeSetup && (
         <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16 }}>
           {/* Lista broker */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -147,21 +151,6 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
               </button>
               {showConfig && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  {(selectedBroker === 'tradovate' || selectedBroker === 'tradovate_prop') && (
-                    <>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Email account Tradovate</div>
-                        <input style={inp} value={config.tvUser} onChange={e => setConfig(p => ({ ...p, tvUser: e.target.value }))} placeholder="email@esempio.com" />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, color: 'var(--text-2)', marginBottom: 4 }}>Password Tradovate</div>
-                        <input style={inp} type="password" value={config.tvPass} onChange={e => setConfig(p => ({ ...p, tvPass: e.target.value }))} placeholder="••••••••" />
-                      </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.6, padding: '6px 8px', background: 'var(--bg-2)', borderRadius: 5 }}>
-                        Usa le credenziali di trader.tradovate.com — per Lucid Trading usa quelle del portale Lucid.
-                      </div>
-                    </>
-                  )}
                   {selectedBroker === 'interactive_brokers' && (
                     <>
                       <div>
@@ -216,7 +205,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
       )}
 
       {/* Status syncs globale — sempre visibile */}
-      {syncs.length > 0 && selectedBroker === 'ninjatrader' && (
+      {syncs.length > 0 && showBridgeSetup && (
         <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10, padding: '12px 16px' }}>
           <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', marginBottom: 8 }}>Conti con sync attiva</div>
           {syncs.map(s => (

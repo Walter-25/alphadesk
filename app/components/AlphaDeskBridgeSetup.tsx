@@ -5,7 +5,7 @@ import { authedFetch } from '../lib/supabase'
 interface ApiKey { id: string; key: string; label: string; created_at: string }
 interface AliasRow { ntAccount: string; displayName: string }
 
-export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
+export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string; mode?: 'nt8'|'watcher' }) {
   const [keys, setKeys]             = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
   const [label, setLabel]           = useState('NinjaTrader')
@@ -18,6 +18,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [commSaving, setCommSaving]     = useState(false)   // save button
   const [commSaveError, setCommSaveError] = useState('')
   const [setupTab, setSetupTab]         = useState<'nt8'|'watcher'>('nt8')
+  const activeTab = mode || setupTab
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -195,28 +196,51 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-      {/* Header */}
-      <div style={{ ...section, borderColor: 'rgba(0,212,170,0.3)', background: 'var(--accent-dim)' }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>⚡ Collega le tue piattaforme</div>
-        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
-          Ogni trade chiuso arriva automaticamente in AlphaDesk. Scegli la piattaforma e segui i passi.
-        </div>
-      </div>
+      {!mode && (
+        <>
+          {/* Header */}
+          <div style={{ ...section, borderColor: 'rgba(0,212,170,0.3)', background: 'var(--accent-dim)' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>⚡ Collega le tue piattaforme</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
+              Ogni trade chiuso arriva automaticamente in AlphaDesk. Scegli la piattaforma e segui i passi.
+            </div>
+          </div>
 
-      {/* Tab selector */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button onClick={() => setSetupTab('nt8')}
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-            background: setupTab === 'nt8' ? 'var(--accent)' : 'var(--bg-3)',
-            color: setupTab === 'nt8' ? '#000' : 'var(--text-1)' }}>
-          🥷 NinjaTrader 8 — Bridge automatico
-        </button>
-        <button onClick={() => setSetupTab('watcher')}
-          style={{ flex: 1, padding: '10px 14px', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 700,
-            background: setupTab === 'watcher' ? 'var(--accent)' : 'var(--bg-3)',
-            color: setupTab === 'watcher' ? '#000' : 'var(--text-1)' }}>
-          📄 DeepCharts / CSV — Watcher
-        </button>
+          {/* Tab selector */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => setSetupTab('nt8')}
+              style={{ flex: 1, padding: '10px 14px', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                background: setupTab === 'nt8' ? 'var(--accent)' : 'var(--bg-3)',
+                color: setupTab === 'nt8' ? '#000' : 'var(--text-1)' }}>
+              🥷 NinjaTrader 8 — Bridge automatico
+            </button>
+            <button onClick={() => setSetupTab('watcher')}
+              style={{ flex: 1, padding: '10px 14px', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                background: setupTab === 'watcher' ? 'var(--accent)' : 'var(--bg-3)',
+                color: setupTab === 'watcher' ? '#000' : 'var(--text-1)' }}>
+              📄 DeepCharts / CSV — Watcher
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Box introduttivo "cosa fa" — sempre in cima alla guida attiva, prima dello Step 1 */}
+      <div style={{ ...section, borderColor: 'rgba(0,212,170,0.3)', background: 'var(--accent-dim)' }}>
+        {activeTab === 'nt8' ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>⚡ AlphaDesk Bridge — cos&apos;è</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
+              Un plugin che gira dentro NinjaTrader 8: ogni trade chiuso viene inviato automaticamente ad AlphaDesk in tempo reale, su qualsiasi conto (simulato, prop, live). Si installa una volta sola, poi non richiede alcuna azione.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>📄 AlphaDesk Watcher — cos&apos;è</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
+              Un piccolo programma che monitora la cartella Download del PC: quando esporti un CSV dalla tua piattaforma (attualmente DeepCharts), lo importa da solo in AlphaDesk e archivia il file. Nessuna credenziale della piattaforma, nessuna installazione al suo interno.
+            </div>
+          </>
+        )}
       </div>
 
       {/* Step 1 — API Key (comune a tutte le piattaforme) */}
@@ -269,7 +293,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         )}
       </div>
 
-      {setupTab === 'nt8' && (
+      {activeTab === 'nt8' && (
         <>
           {/* Step 2: Mapping conti */}
           <div style={section}>
@@ -453,7 +477,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         </>
       )}
 
-      {setupTab === 'watcher' && (
+      {activeTab === 'watcher' && (
         <>
           {/* Step 2: Scarica i file */}
           <div style={section}>
