@@ -6,6 +6,7 @@ export interface Trade {
   exit_price: number; quantity: number; pnl: number; commission: number
   net_pnl: number; mae?: number; mfe?: number
   emotion_tags?: string[]; rule_followed?: boolean; notes?: string; setup_quality?: number
+  screenshot_1_url?: string | null; screenshot_2_url?: string | null
 }
 
 export function parseNinjaTradeList(text: string, account: string): Trade[] {

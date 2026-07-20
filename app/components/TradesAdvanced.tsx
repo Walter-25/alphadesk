@@ -4,6 +4,7 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
          ReferenceLine, CartesianGrid, PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis } from 'recharts'
 import SyncPanel from './SyncPanel'
 import { parseNinjaTradeList, type Trade } from '../lib/csvParsers'
+import { authedFetch } from '../lib/supabase'
 
 // ─── TIPI ─────────────────────────────────────────────────────────────────────
 interface PerfReport {
@@ -669,6 +670,62 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
 }
 
 // ─── TRADE ROW ESPANDIBILE ────────────────────────────────────────────────────
+// ─── SCREENSHOT SLOT ──────────────────────────────────────────────────────────
+function ScreenshotSlot({ trade, slot, path, onUpdate }: { trade: Trade; slot: 1|2; path?: string|null; onUpdate: (id: string, u: Partial<Trade>) => void }) {
+  const [url, setUrl] = useState<string|null>(null)
+  const [error, setError] = useState(false)
+  const [lightbox, setLightbox] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setUrl(null); setError(false)
+    if (!path) return
+    authedFetch(`/api/screenshot?path=${encodeURIComponent(path)}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(data => { if (!cancelled) setUrl(data.url) })
+      .catch(() => { if (!cancelled) setError(true) })
+    return () => { cancelled = true }
+  }, [path])
+
+  const handleDelete = async () => {
+    if (!confirm(`Eliminare lo screenshot slot ${slot}?`)) return
+    await authedFetch('/api/screenshot', { method: 'DELETE', body: JSON.stringify({ tradeId: trade.id, slot }) })
+    onUpdate(trade.id, slot === 1 ? { screenshot_1_url: null } : { screenshot_2_url: null })
+  }
+
+  const boxStyle: React.CSSProperties = { borderRadius: 8, textAlign: 'center', fontSize: 10, color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 70 }
+
+  if (!path) {
+    return (
+      <div style={{ ...boxStyle, border: '1px dashed var(--border)', padding: '4px' }}>
+        Slot {slot} — usa AlphaDesk Screenshot (Ctrl+Shift+{slot})
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {error ? (
+        <div style={{ ...boxStyle, border: '1px solid var(--border)', background: 'var(--bg-2)' }}>⚠ Errore caricamento</div>
+      ) : url ? (
+        <img src={url} onClick={() => setLightbox(true)} alt={`Screenshot slot ${slot}`}
+          style={{ width: '100%', height: 70, objectFit: 'cover', borderRadius: 8, cursor: 'pointer', border: '1px solid var(--border)' }} />
+      ) : (
+        <div style={{ ...boxStyle, border: '1px solid var(--border)', background: 'var(--bg-2)' }}>Caricamento...</div>
+      )}
+      <button onClick={handleDelete} title="Elimina screenshot"
+        style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: '50%', border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 10, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>✕</button>
+      {lightbox && url && (
+        <div onClick={() => setLightbox(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <img src={url} alt={`Screenshot slot ${slot}`} onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '90vw', maxHeight: '90vh', borderRadius: 8, cursor: 'default' }} />
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void; knownStrategies?: string[] }) {
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<string[]>(trade.emotion_tags || [])
@@ -753,6 +810,12 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
               <textarea value={notes} onChange={e=>setNotes(e.target.value)} onBlur={()=>onUpdate(trade.id,{notes})}
                 placeholder="Setup, motivazione, cosa hai fatto bene/male..."
                 style={{width:'100%',height:90,background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:7,color:'var(--text-0)',fontSize:12,padding:'8px 10px',resize:'none',fontFamily:'var(--font-body)',outline:'none'}}/>
+
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginTop:14,marginBottom:10,letterSpacing:'0.06em'}}>Screenshot</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <ScreenshotSlot trade={trade} slot={1} path={trade.screenshot_1_url} onUpdate={onUpdate} />
+                <ScreenshotSlot trade={trade} slot={2} path={trade.screenshot_2_url} onUpdate={onUpdate} />
+              </div>
             </div>
           </div>
         </div>
