@@ -1,4 +1,4 @@
-#requires -version 5.1
+﻿#requires -version 5.1
 # ─── AlphaDesk Watcher ────────────────────────────────────────────────────────
 # Monitora una cartella per export CSV DeepCharts e li importa automaticamente
 # in AlphaDesk tramite l'endpoint /api/ingest-csv.
