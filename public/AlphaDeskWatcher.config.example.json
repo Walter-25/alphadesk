@@ -1,0 +1,6 @@
+{
+  "apiKey": "la-tua-api-key-alphadesk",
+  "account": "NomeConto",
+  "watchFolder": "",
+  "apiUrl": "https://alphadesk-ecru.vercel.app/api/ingest-csv"
+}
