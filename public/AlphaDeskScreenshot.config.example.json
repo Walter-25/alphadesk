@@ -1,0 +1,7 @@
+{
+  "apiKey": "la-tua-api-key-alphadesk",
+  "account": "",
+  "apiUrl": "https://alphadesk-ecru.vercel.app/api/screenshot",
+  "captureAllMonitors": false,
+  "jpegQuality": 85
+}
