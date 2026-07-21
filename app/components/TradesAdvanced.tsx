@@ -671,10 +671,47 @@ function StatsView({ perfReport, trades }: { perfReport?: PerfReport; trades: Tr
 
 // ─── TRADE ROW ESPANDIBILE ────────────────────────────────────────────────────
 // ─── SCREENSHOT SLOT ──────────────────────────────────────────────────────────
+// Ridimensiona/converte in JPEG lato client se l'immagine supera i 1600px sul lato lungo,
+// per restare sotto il limite di 4MB del payload.
+async function fileToJpegBase64(file: File): Promise<string> {
+  const dataUrl: string = await new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+
+  const img = new Image()
+  const loaded: HTMLImageElement = await new Promise((resolve, reject) => {
+    img.onload = () => resolve(img)
+    img.onerror = reject
+    img.src = dataUrl
+  })
+
+  const maxSide = 1600
+  const longSide = Math.max(loaded.width, loaded.height)
+  if (longSide <= maxSide) {
+    return dataUrl.split(',')[1] || ''
+  }
+
+  const scale = maxSide / longSide
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(loaded.width * scale)
+  canvas.height = Math.round(loaded.height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return dataUrl.split(',')[1] || ''
+  ctx.drawImage(loaded, 0, 0, canvas.width, canvas.height)
+  const resizedDataUrl = canvas.toDataURL('image/jpeg', 0.9)
+  return resizedDataUrl.split(',')[1] || ''
+}
+
 function ScreenshotSlot({ trade, slot, path, onUpdate }: { trade: Trade; slot: 1|2; path?: string|null; onUpdate: (id: string, u: Partial<Trade>) => void }) {
   const [url, setUrl] = useState<string|null>(null)
   const [error, setError] = useState(false)
   const [lightbox, setLightbox] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -693,12 +730,51 @@ function ScreenshotSlot({ trade, slot, path, onUpdate }: { trade: Trade; slot: 1
     onUpdate(trade.id, slot === 1 ? { screenshot_1_url: null } : { screenshot_2_url: null })
   }
 
+  const uploadFile = async (file: File) => {
+    if (!file.type.startsWith('image/')) return
+    setUploading(true)
+    try {
+      const imageBase64 = await fileToJpegBase64(file)
+      const res = await authedFetch('/api/screenshot', {
+        method: 'POST',
+        body: JSON.stringify({ tradeId: trade.id, slot, imageBase64 }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const newPath = data.screenshotPath || path
+        onUpdate(trade.id, slot === 1 ? { screenshot_1_url: newPath } : { screenshot_2_url: newPath })
+      }
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) uploadFile(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) uploadFile(file)
+  }
+
   const boxStyle: React.CSSProperties = { borderRadius: 8, textAlign: 'center', fontSize: 10, color: 'var(--text-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 70 }
 
   if (!path) {
     return (
-      <div style={{ ...boxStyle, border: '1px dashed var(--border)', padding: '4px' }}>
-        Slot {slot} — usa AlphaDesk Screenshot (Ctrl+Shift+{slot})
+      <div
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        style={{ ...boxStyle, border: '1px dashed var(--border)', padding: '4px', cursor: 'pointer', background: dragOver ? 'var(--bg-2)' : undefined }}
+      >
+        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+        {uploading ? 'Caricamento...' : `Slot ${slot} — trascina o clicca per caricare · (o Ctrl+Shift+${slot} con l'utility)`}
       </div>
     )
   }

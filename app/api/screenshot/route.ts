@@ -4,7 +4,10 @@ import { adminClient as admin, getAuthedUser, canAccess } from '../../lib/supaba
 const BUCKET = 'trade-screenshots'
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024 // 4MB — limite payload Vercel
 
-// POST — carica uno screenshot via API key (AlphaDesk Screenshot) e lo aggancia all'ultimo trade
+// POST — carica uno screenshot e lo aggancia a un trade.
+// Due flussi:
+//  - via apiKey (AlphaDesk Screenshot utility): aggancia all'ultimo trade dell'utente/conto
+//  - via sessione browser + tradeId (upload manuale da import CSV): aggancia al trade specificato
 export async function POST(req: NextRequest) {
   try {
     return await handlePost(req)
@@ -22,27 +25,71 @@ async function handlePost(req: NextRequest) {
     return NextResponse.json({ error: 'JSON non valido' }, { status: 400 })
   }
 
-  const { apiKey, account, slot, imageBase64 } = body
+  const { apiKey, account, slot, imageBase64, tradeId } = body
 
   const slotNum = Number(slot)
   if (slotNum !== 1 && slotNum !== 2) {
     return NextResponse.json({ error: 'slot deve essere 1 o 2' }, { status: 400 })
   }
-  if (!apiKey || !imageBase64) {
-    return NextResponse.json({ error: 'apiKey e imageBase64 sono obbligatori' }, { status: 400 })
+  if (!imageBase64) {
+    return NextResponse.json({ error: 'imageBase64 è obbligatorio' }, { status: 400 })
   }
 
   const sb = admin()
-  const { data: keyData } = await sb
-    .from('api_keys')
-    .select('user_id')
-    .eq('key', apiKey)
-    .single()
+  let userId: string
+  let trade: { id: string; instrument: string; account: string; entry_time: string; screenshot_1_url?: string | null; screenshot_2_url?: string | null }
 
-  if (!keyData) {
-    return NextResponse.json({ error: 'API key non valida' }, { status: 401 })
+  if (tradeId) {
+    const authedUser = await getAuthedUser(req)
+    if (!authedUser) return NextResponse.json({ error: 'Non autorizzato' }, { status: 401 })
+
+    const { data: targetTrade } = await sb
+      .from('trades')
+      .select('id, user_id, instrument, account, entry_time, exit_time, screenshot_1_url, screenshot_2_url')
+      .eq('id', tradeId)
+      .single()
+
+    if (!targetTrade) {
+      return NextResponse.json({ error: 'Trade non trovato' }, { status: 404 })
+    }
+    if (!canAccess(authedUser, (targetTrade as any).user_id)) {
+      return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
+    }
+
+    userId = (targetTrade as any).user_id
+    trade = targetTrade
+  } else {
+    if (!apiKey) {
+      return NextResponse.json({ error: 'apiKey e imageBase64 sono obbligatori' }, { status: 400 })
+    }
+
+    const { data: keyData } = await sb
+      .from('api_keys')
+      .select('user_id')
+      .eq('key', apiKey)
+      .single()
+
+    if (!keyData) {
+      return NextResponse.json({ error: 'API key non valida' }, { status: 401 })
+    }
+    userId = keyData.user_id
+
+    let tradeQuery = sb
+      .from('trades')
+      .select('id, instrument, account, entry_time, exit_time, screenshot_1_url, screenshot_2_url')
+      .eq('user_id', userId)
+    if (account) tradeQuery = tradeQuery.eq('account', account)
+
+    const { data: lastTrade } = await tradeQuery
+      .order('exit_time', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!lastTrade) {
+      return NextResponse.json({ error: 'Nessun trade trovato a cui agganciare lo screenshot' }, { status: 404 })
+    }
+    trade = lastTrade
   }
-  const userId = keyData.user_id
 
   let buffer: Buffer
   try {
@@ -55,21 +102,6 @@ async function handlePost(req: NextRequest) {
   }
   if (buffer.length > MAX_IMAGE_BYTES) {
     return NextResponse.json({ error: 'immagine troppo grande (max 4MB)' }, { status: 400 })
-  }
-
-  let tradeQuery = sb
-    .from('trades')
-    .select('id, instrument, account, entry_time, exit_time, screenshot_1_url, screenshot_2_url')
-    .eq('user_id', userId)
-  if (account) tradeQuery = tradeQuery.eq('account', account)
-
-  const { data: trade } = await tradeQuery
-    .order('exit_time', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (!trade) {
-    return NextResponse.json({ error: 'Nessun trade trovato a cui agganciare lo screenshot' }, { status: 404 })
   }
 
   const columnName = slotNum === 1 ? 'screenshot_1_url' : 'screenshot_2_url'
@@ -97,6 +129,7 @@ async function handlePost(req: NextRequest) {
     success: true,
     trade: { instrument: trade.instrument, account: trade.account, entry_time: trade.entry_time },
     slot: slotNum,
+    screenshotPath: path,
   })
 }
 
