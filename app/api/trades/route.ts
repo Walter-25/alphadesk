@@ -47,3 +47,24 @@ export async function POST(req: NextRequest) {
   }, { onConflict: 'user_id,account' })
   return NextResponse.json({ success: true, count: trades.length })
 }
+
+// PATCH — aggiorna un singolo trade (note, tag emotivi, disciplina, strategia, ecc.)
+// Usa ninja_id come chiave stabile: l'id numerico del frontend NON coincide con
+// l'id UUID generato da Supabase all'insert, quindi un update per id fallirebbe in silenzio.
+export async function PATCH(req: NextRequest) {
+  const { userId, ninjaId, tradeId, updates } = await req.json()
+  if (!userId || !updates) return NextResponse.json({ error: 'Missing data' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
+  const sb = admin()
+  // Non permettere di modificare campi identità/chiave
+  const { id: _id, user_id: _uid, ninja_id: _nid, ...safe } = updates
+  let q = sb.from('trades').update(safe).eq('user_id', userId)
+  // Preferisci ninja_id (stabile); fallback su id UUID reale se fornito
+  if (ninjaId) q = q.eq('ninja_id', ninjaId)
+  else if (tradeId) q = q.eq('id', tradeId)
+  else return NextResponse.json({ error: 'ninjaId o tradeId richiesto' }, { status: 400 })
+  const { data, error } = await q.select('id')
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ success: true, updated: data?.length || 0 })
+}

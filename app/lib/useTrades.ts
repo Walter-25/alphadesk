@@ -63,17 +63,21 @@ export function useTrades(userId: string) {
       const tradesError = tradesJson.error || null
 
       if (!tradesError && tradesData && tradesData.length > 0) {
-        // Supabase ha dati — merge con locale (locale può avere tag emotivi più aggiornati)
+        // Il cloud (Supabase) è la fonte autorevole per note/tag/disciplina, ora che
+        // updateTrade li persiste via PATCH. Il locale serve solo come fallback per
+        // eventuali annotazioni non ancora sincronizzate (campo assente lato cloud).
         const cloudMap = new Map(tradesData.map((t: any) => [t.ninja_id || t.id, t]))
         const localMap = new Map(localTrades.map((t: Trade) => [t.ninja_id || t.id, t]))
-        // Unisce: cloud come base, locale sovrascrive se ha più dati emotivi
         const merged = tradesData.map((t: any) => {
-          const local = localMap.get(t.ninja_id || t.id)
-          if (local && (local.emotion_tags?.length || local.notes || local.rule_followed !== undefined)) {
-            return { ...t, emotion_tags: local.emotion_tags, notes: local.notes,
-              rule_followed: local.rule_followed, setup_quality: local.setup_quality }
-          }
-          return t
+          const local: any = localMap.get(t.ninja_id || t.id)
+          if (!local) return t
+          // Riempi solo i buchi: se il cloud ha già il valore, quello vince
+          const fill: any = {}
+          if ((t.emotion_tags == null || t.emotion_tags.length === 0) && local.emotion_tags?.length) fill.emotion_tags = local.emotion_tags
+          if ((t.notes == null || t.notes === '') && local.notes) fill.notes = local.notes
+          if (t.rule_followed == null && local.rule_followed !== undefined) fill.rule_followed = local.rule_followed
+          if (t.setup_quality == null && local.setup_quality != null) fill.setup_quality = local.setup_quality
+          return Object.keys(fill).length ? { ...t, ...fill } : t
         })
         // Aggiungi trade locali non ancora su cloud
         localTrades.forEach((t: Trade) => {
@@ -149,10 +153,34 @@ export function useTrades(userId: string) {
     setPerfReports(prev => ({ ...prev, [account]: stats }))
   }, [userId])
 
-  // Aggiorna singolo trade (tag emotivi, note, ecc.)
+  // Aggiorna singolo trade (tag emotivi, note, disciplina, strategia, screenshot, ecc.)
   const updateTrade = useCallback(async (id: string, updates: Partial<Trade>) => {
-    setTrades(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
-    await supabase.from('trades').update(updates).eq('id', id).eq('user_id', userId)
+    // Aggiornamento ottimistico in memoria
+    let target: Trade | undefined
+    setTrades(prev => prev.map(t => {
+      if (t.id === id) { target = t; return { ...t, ...updates } }
+      return t
+    }))
+    // Persistenza via PATCH usando ninja_id (chiave stabile): l'id del frontend NON
+    // coincide con l'id UUID di Supabase per i trade importati, quindi un update per
+    // id fallirebbe in silenzio e le note andrebbero perse al reload.
+    try {
+      const ninjaId = target?.ninja_id
+      const res = await authedFetch('/api/trades', {
+        method: 'PATCH',
+        body: JSON.stringify({ userId, ninjaId, tradeId: ninjaId ? undefined : id, updates })
+      })
+      const data = await res.json().catch(() => ({}))
+      // Aggiorna anche la cache locale così il reload da localStorage resta coerente
+      try {
+        setTrades(cur => { localStorage.setItem('ad_trades_' + userId, JSON.stringify(cur)); return cur })
+      } catch {}
+      if (!res.ok || data?.updated === 0) {
+        console.warn('updateTrade: nessuna riga aggiornata', data)
+      }
+    } catch (e) {
+      console.error('updateTrade error', e)
+    }
   }, [userId])
 
   // Rinomina account localmente
