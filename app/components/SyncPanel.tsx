@@ -61,6 +61,30 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
         Modi per portare i trade in AlphaDesk: ⚡ Bridge NT8 (tempo reale, automatico) · 📄 Watcher CSV (semi-automatico, oggi DeepCharts) · 🏦 IBKR FlexQuery · 📥 import manuale dalla tab Import. Questa lista cresce man mano che aggiungiamo integrazioni.
       </div>
 
+      {/* Screenshot dei trade — guida statica, sempre visibile */}
+      <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          📸 Screenshot dei trade — due modi
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Puoi allegare fino a 2 immagini per ogni trade (grafici, setup, note visive).
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          ⚡ <strong style={{ color: 'var(--text-0)' }}>Con NinjaTrader 8 (in tempo reale)</strong>: usa l'utility AlphaDesk Screenshot. Scarica i file qui sotto, configurala con la tua API key, avviala e premi Ctrl+Shift+1 o Ctrl+Shift+2 mentre operi — cattura il monitor dove si trova il mouse e lo aggancia all'ultimo trade. Ideale quando il trade viene registrato subito dal Bridge.
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          📥 <strong style={{ color: 'var(--text-0)' }}>Con DeepCharts, ATAS o qualsiasi import CSV (a posteriori)</strong>: apri la sezione Eseguiti → Lista Trade, espandi il trade che ti interessa e nella sezione Screenshot in fondo trascina un'immagine (o clicca per selezionarla) direttamente sullo slot. È il modo giusto quando importi i trade la sera: salvi gli screenshot durante l'operatività (es. Win+Shift+S di Windows) in una cartella, e poi li associ ai trade dopo l'import.
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+          <a href="/AlphaDeskScreenshot.bat" download="AlphaDeskScreenshot.bat" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>⬇ AlphaDeskScreenshot.bat</a>
+          <a href="/AlphaDeskScreenshot.ps1" download="AlphaDeskScreenshot.ps1" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>⬇ AlphaDeskScreenshot.ps1</a>
+          <a href="/AlphaDeskScreenshot.config.example.json" download="AlphaDeskScreenshot.config.example.json" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>⬇ AlphaDeskScreenshot.config.example.json</a>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-2)' }}>
+          L'utility hotkey serve solo per il flusso NinjaTrader in tempo reale — per gli import CSV non è necessaria.
+        </div>
+      </div>
+
       {/* ── NinjaTrader / Watcher: mostra setup senza chiedere il conto ── */}
       {showBridgeSetup && (
         <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 16 }}>
