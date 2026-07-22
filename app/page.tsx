@@ -6,6 +6,7 @@ import AdminPanel from './components/AdminPanel'
 import TradingViewChart from './components/TradingViewChart'
 import EconomicCalendar from './components/EconomicCalendar'
 import TradesAdvanced from './components/TradesAdvanced'
+import PremarketJournal from './components/PremarketJournal'
 import SyncPanel from './components/SyncPanel'
 import ChangePasswordModal from './components/ChangePasswordModal'
 import { useTrades } from './lib/useTrades'
@@ -379,6 +380,7 @@ function AuthSidebar({ active, setActive, displayName, initials, isAdmin, onLogo
     { id: 'dashboard', label: 'Dashboard', icon: '◈' },
     { id: 'eseguiti', label: 'Eseguiti', icon: '◑' },
     { id: 'operativita', label: 'Operatività', icon: '◐' },
+    { id: 'premarket', label: 'Pre-Market', icon: '☀' },
   ]
   return (
     <aside style={{ width: 220, background: 'var(--bg-1)', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', height: '100vh', position: 'fixed', left: 0, top: 0, zIndex: 100 }}>
@@ -484,6 +486,7 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
     dashboard: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
     eseguiti: <TradesAdvanced userId={user.id} tradesHook={tradesHook} />,
     operativita: <PageOperativita tradesHook={tradesHook} />,
+    premarket: <PremarketJournal userId={user.id} />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
   }
 

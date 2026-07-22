@@ -19,7 +19,7 @@ interface PerfReport {
 }
 
 // ─── EMOTION TAGS ─────────────────────────────────────────────────────────────
-const EMOTION_TAGS = [
+export const EMOTION_TAGS = [
   { id: 'fomo', label: 'FOMO', color: '#f5a623' },
   { id: 'revenge', label: 'Revenge', color: '#ff4d6d' },
   { id: 'early_exit', label: 'Uscita anticipata', color: '#4da6ff' },
@@ -30,8 +30,15 @@ const EMOTION_TAGS = [
   { id: 'overconfident', label: 'Overconfidence', color: '#e67e22' },
   { id: 'fear', label: 'Paura', color: '#e74c3c' },
   { id: 'plan_trade', label: 'Trade pianificato', color: '#1abc9c' },
+  { id: 'insecure', label: 'Insicurezza', color: '#7f8c8d' },
+  { id: 'undervalued', label: 'Sottostima capacità', color: '#95a5a6' },
+  { id: 'euphoric', label: 'Euforia', color: '#e84393' },
+  { id: 'hope', label: 'Speranza', color: '#a29bfe' },
+  { id: 'anxiety', label: 'Ansia', color: '#6c5ce7' },
+  { id: 'frustration', label: 'Frustrazione', color: '#d35400' },
+  { id: 'serene', label: 'Sereno', color: '#00b894' },
 ]
-const POSITIVE_TAGS = ['disciplined', 'patient', 'plan_trade']
+const POSITIVE_TAGS = ['disciplined', 'patient', 'plan_trade', 'serene']
 const WEEKDAYS = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab']
 
 // ─── PARSERS ──────────────────────────────────────────────────────────────────
