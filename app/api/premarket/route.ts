@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     try { body = await req.json() }
     catch { return NextResponse.json({ error: 'JSON non valido' }, { status: 400 }) }
 
-    const { userId, entry_date, mood, energy, sleep_quality, self_confidence, life_events, intention, emotions } = body
+    const { userId, entry_date, mood, energy, sleep_quality, self_confidence, life_events, intention, emotions, planned_break } = body
     if (!userId) return NextResponse.json({ error: 'userId required' }, { status: 400 })
     if (!entry_date) return NextResponse.json({ error: 'entry_date required' }, { status: 400 })
     const authedUser = await getAuthedUser(req)
@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
       life_events: life_events || '',
       intention: intention || '',
       emotions: Array.isArray(emotions) ? emotions : [],
+      planned_break: !!planned_break,
       updated_at: new Date().toISOString(),
     }
 

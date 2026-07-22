@@ -486,7 +486,7 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
     dashboard: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
     eseguiti: <TradesAdvanced userId={user.id} tradesHook={tradesHook} />,
     operativita: <PageOperativita tradesHook={tradesHook} />,
-    premarket: <PremarketJournal userId={user.id} />,
+    premarket: <PremarketJournal userId={user.id} tradesHook={tradesHook} />,
     admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
   }
 

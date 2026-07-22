@@ -2,6 +2,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { authedFetch } from '../lib/supabase'
 import { EMOTION_TAGS } from './TradesAdvanced'
+import { marketDaysBetween, describeGap, parseDateKey } from '../lib/tradingDays'
+import EmotionalInsights from './EmotionalInsights'
+import type { useTrades } from '../lib/useTrades'
 
 interface JournalEntry {
   id?: string
@@ -13,11 +16,12 @@ interface JournalEntry {
   life_events: string
   intention: string
   emotions: string[]
+  planned_break: boolean
 }
 
 const EMPTY: JournalEntry = {
   entry_date: '', mood: null, energy: null, sleep_quality: null, self_confidence: null,
-  life_events: '', intention: '', emotions: [],
+  life_events: '', intention: '', emotions: [], planned_break: false,
 }
 
 const MOOD_ICONS = ['😞', '🙁', '😐', '🙂', '😄']
@@ -51,7 +55,9 @@ function LevelSelector({ label, icons, value, onChange }: { label: string; icons
   )
 }
 
-export default function PremarketJournal({ userId }: { userId: string }) {
+interface GapBanner { level: 'weekend' | 'short' | 'long'; label: string; marketDays: number }
+
+export default function PremarketJournal({ userId, tradesHook }: { userId: string; tradesHook?: ReturnType<typeof useTrades> }) {
   const entryDate = todayLocal()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -59,6 +65,7 @@ export default function PremarketJournal({ userId }: { userId: string }) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
   const [form, setForm] = useState<JournalEntry>({ ...EMPTY, entry_date: entryDate })
+  const [gapBanner, setGapBanner] = useState<GapBanner | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -71,10 +78,21 @@ export default function PremarketJournal({ userId }: { userId: string }) {
           mood: data.entry.mood, energy: data.entry.energy,
           sleep_quality: data.entry.sleep_quality, self_confidence: data.entry.self_confidence,
           life_events: data.entry.life_events || '', intention: data.entry.intention || '',
-          emotions: data.entry.emotions || [],
+          emotions: data.entry.emotions || [], planned_break: !!data.entry.planned_break,
         })
         setEditing(false)
         setSaved(true)
+      }
+
+      // Rilevamento rientro: cerca l'ultima sessione NON di pausa pianificata prima di oggi
+      const histRes = await authedFetch(`/api/premarket?userId=${userId}`)
+      const histData = await histRes.json()
+      const entries: any[] = histData.entries || []
+      const lastNonBreak = entries.find(e => e.entry_date < entryDate && !e.planned_break)
+      if (lastNonBreak) {
+        const mkt = marketDaysBetween(parseDateKey(lastNonBreak.entry_date), parseDateKey(entryDate))
+        const gap = describeGap(mkt)
+        if (gap.level !== 'none') setGapBanner({ level: gap.level, label: gap.label, marketDays: mkt })
       }
     } catch (e: any) {
       setError(e?.message || 'Errore di caricamento')
@@ -123,6 +141,14 @@ export default function PremarketJournal({ userId }: { userId: string }) {
         </div>
       </div>
 
+      {gapBanner && (
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--accent-dim)', color: 'var(--text-1)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 16, border: '1px solid var(--accent)' }}>
+          {gapBanner.level === 'long'
+            ? <>Rientro dopo una pausa prolungata ({gapBanner.marketDays} giorni di mercato) — molti trader ripartono con size ridotta finché non ritrovano il ritmo. La scelta resta a te.</>
+            : <>☀ Bentornato. {gapBanner.label}.</>}
+        </div>
+      )}
+
       {error && (
         <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--red-dim)', color: 'var(--red)', fontSize: 12, marginBottom: 16 }}>
           {error}
@@ -132,14 +158,20 @@ export default function PremarketJournal({ userId }: { userId: string }) {
       {saved && !editing ? (
         <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 12, fontWeight: 600, marginBottom: 20 }}>
-            ✓ Check-in di oggi registrato
+            ✓ {form.planned_break ? 'Pausa pianificata registrata per oggi' : 'Check-in di oggi registrato'}
           </div>
+
+          {form.planned_break && (
+            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 16 }}>
+              Giornata marcata come pausa volontaria — non verrà contata come sessione saltata.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
             <SummaryStat label="Come ti senti" icon={form.mood ? MOOD_ICONS[form.mood - 1] : '—'} value={form.mood} />
             <SummaryStat label="Energia" icon={form.energy ? ENERGY_ICONS[form.energy - 1] : '—'} value={form.energy} />
-            <SummaryStat label="Sonno" icon={form.sleep_quality ? SLEEP_ICONS[form.sleep_quality - 1] : '—'} value={form.sleep_quality} />
-            <SummaryStat label="Fiducia in te" icon={form.self_confidence ? CONFIDENCE_ICONS[form.self_confidence - 1] : '—'} value={form.self_confidence} />
+            {!form.planned_break && <SummaryStat label="Sonno" icon={form.sleep_quality ? SLEEP_ICONS[form.sleep_quality - 1] : '—'} value={form.sleep_quality} />}
+            {!form.planned_break && <SummaryStat label="Fiducia in te" icon={form.self_confidence ? CONFIDENCE_ICONS[form.self_confidence - 1] : '—'} value={form.self_confidence} />}
           </div>
 
           {form.emotions.length > 0 && (
@@ -161,7 +193,7 @@ export default function PremarketJournal({ userId }: { userId: string }) {
             </div>
           )}
 
-          {form.intention && (
+          {!form.planned_break && form.intention && (
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em' }}>Intenzione per la sessione</div>
               <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{form.intention}</div>
@@ -175,24 +207,37 @@ export default function PremarketJournal({ userId }: { userId: string }) {
         </div>
       ) : (
         <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div>
+            <button onClick={() => setForm(f => ({ ...f, planned_break: !f.planned_break }))}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '12px 14px', borderRadius: 8, border: `1px solid ${form.planned_break ? 'var(--accent)' : 'var(--border)'}`, background: form.planned_break ? 'var(--accent-dim)' : 'var(--bg-3)', cursor: 'pointer', textAlign: 'left' }}>
+              <span style={{ fontSize: 18 }}>{form.planned_break ? '☑' : '☐'}</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: form.planned_break ? 'var(--accent)' : 'var(--text-1)' }}>Oggi è un giorno di pausa pianificata (non opero)</span>
+            </button>
+            <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.4 }}>
+              Segna le pause volontarie così non vengono contate come sessioni saltate.
+            </div>
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
             <LevelSelector label="Come ti senti" icons={MOOD_ICONS} value={form.mood} onChange={v => setForm(f => ({ ...f, mood: v }))} />
             <LevelSelector label="Energia" icons={ENERGY_ICONS} value={form.energy} onChange={v => setForm(f => ({ ...f, energy: v }))} />
-            <LevelSelector label="Sonno" icons={SLEEP_ICONS} value={form.sleep_quality} onChange={v => setForm(f => ({ ...f, sleep_quality: v }))} />
-            <LevelSelector label="Fiducia in te" icons={CONFIDENCE_ICONS} value={form.self_confidence} onChange={v => setForm(f => ({ ...f, self_confidence: v }))} />
+            {!form.planned_break && <LevelSelector label="Sonno" icons={SLEEP_ICONS} value={form.sleep_quality} onChange={v => setForm(f => ({ ...f, sleep_quality: v }))} />}
+            {!form.planned_break && <LevelSelector label="Fiducia in te" icons={CONFIDENCE_ICONS} value={form.self_confidence} onChange={v => setForm(f => ({ ...f, self_confidence: v }))} />}
           </div>
 
-          <div>
-            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Emozioni</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-              {EMOTION_TAGS.map(tag => (
-                <button key={tag.id} onClick={() => toggleEmotion(tag.id)}
-                  style={{ padding: '4px 9px', borderRadius: 5, border: `1px solid ${form.emotions.includes(tag.id) ? tag.color : 'var(--border)'}`, background: form.emotions.includes(tag.id) ? `${tag.color}22` : 'transparent', color: form.emotions.includes(tag.id) ? tag.color : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontWeight: form.emotions.includes(tag.id) ? 600 : 400 }}>
-                  {tag.label}
-                </button>
-              ))}
+          {!form.planned_break && (
+            <div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Emozioni</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                {EMOTION_TAGS.map(tag => (
+                  <button key={tag.id} onClick={() => toggleEmotion(tag.id)}
+                    style={{ padding: '4px 9px', borderRadius: 5, border: `1px solid ${form.emotions.includes(tag.id) ? tag.color : 'var(--border)'}`, background: form.emotions.includes(tag.id) ? `${tag.color}22` : 'transparent', color: form.emotions.includes(tag.id) ? tag.color : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontWeight: form.emotions.includes(tag.id) ? 600 : 400 }}>
+                    {tag.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Cosa è successo prima di operare oggi?</div>
@@ -201,12 +246,14 @@ export default function PremarketJournal({ userId }: { userId: string }) {
               style={{ width: '100%', height: 80, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 13, padding: '10px 12px', resize: 'none', fontFamily: 'var(--font-body)', outline: 'none' }} />
           </div>
 
-          <div>
-            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Intenzione per la sessione</div>
-            <textarea value={form.intention} onChange={e => setForm(f => ({ ...f, intention: e.target.value }))}
-              placeholder="Cosa vuoi portare con te in questa sessione..."
-              style={{ width: '100%', height: 80, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 13, padding: '10px 12px', resize: 'none', fontFamily: 'var(--font-body)', outline: 'none' }} />
-          </div>
+          {!form.planned_break && (
+            <div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Intenzione per la sessione</div>
+              <textarea value={form.intention} onChange={e => setForm(f => ({ ...f, intention: e.target.value }))}
+                placeholder="Cosa vuoi portare con te in questa sessione..."
+                style={{ width: '100%', height: 80, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 13, padding: '10px 12px', resize: 'none', fontFamily: 'var(--font-body)', outline: 'none' }} />
+            </div>
+          )}
 
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={save} disabled={saving}
@@ -220,6 +267,12 @@ export default function PremarketJournal({ userId }: { userId: string }) {
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {tradesHook && (
+        <div style={{ marginTop: 32 }}>
+          <EmotionalInsights userId={userId} tradesHook={tradesHook} />
         </div>
       )}
     </div>
