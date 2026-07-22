@@ -29,6 +29,12 @@ const ENERGY_ICONS = ['🪫', '🔅', '🔆', '🔋', '⚡']
 const SLEEP_ICONS = ['🌑', '🌒', '🌓', '🌔', '🌕']
 const CONFIDENCE_ICONS = ['😰', '😟', '😐', '🙂', '💪']
 
+// Etichette testuali per ogni livello 1 a 5, mostrate sotto le icone per togliere ogni ambiguita'.
+const MOOD_LABELS = ['Molto giu', 'Giu', 'Neutro', 'Bene', 'Ottimo']
+const ENERGY_LABELS = ['Scarico', 'Fiacco', 'Nella media', 'Carico', 'Al massimo']
+const SLEEP_LABELS = ['Pessimo', 'Poco', 'Sufficiente', 'Buono', 'Ottimo']
+const CONFIDENCE_LABELS = ['Molto insicuro', 'Insicuro', 'Neutro', 'Fiducioso', 'Molto sicuro']
+
 // Sottoinsieme di EMOTION_TAGS pertinente al PRIMA di operare: solo stati d'animo
 // d'arrivo, non i comportamenti-di-trade (FOMO, revenge, overtrading, ecc.) che
 // si taggano sul singolo trade in TradesAdvanced.
@@ -57,7 +63,7 @@ function marketDayKeysBetween(fromKey: string, toKey: string): string[] {
   return days
 }
 
-function LevelSelector({ label, icons, value, onChange }: { label: string; icons: string[]; value: number | null; onChange: (v: number) => void }) {
+function LevelSelector({ label, icons, labels, value, onChange }: { label: string; icons: string[]; labels?: string[]; value: number | null; onChange: (v: number) => void }) {
   return (
     <div>
       <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>{label}</div>
@@ -66,13 +72,20 @@ function LevelSelector({ label, icons, value, onChange }: { label: string; icons
           const n = i + 1
           const active = value === n
           return (
-            <button key={n} onClick={() => onChange(n)}
+            <button key={n} onClick={() => onChange(n)} title={labels ? labels[i] : undefined}
               style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-dim)' : 'var(--bg-2)', cursor: 'pointer', fontSize: 20, opacity: active ? 1 : 0.5, transition: 'all 0.15s' }}>
               {icon}
             </button>
           )
         })}
       </div>
+      {labels && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 9, color: 'var(--text-2)' }}>
+          <span>{labels[0]}</span>
+          <span style={{ color: value ? 'var(--accent)' : 'var(--text-2)', fontWeight: value ? 600 : 400 }}>{value ? labels[value - 1] : ''}</span>
+          <span>{labels[labels.length - 1]}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -287,10 +300,10 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
-            <LevelSelector label="Come ti senti" icons={MOOD_ICONS} value={form.mood} onChange={v => setForm(f => ({ ...f, mood: v }))} />
-            <LevelSelector label="Energia" icons={ENERGY_ICONS} value={form.energy} onChange={v => setForm(f => ({ ...f, energy: v }))} />
-            {!form.planned_break && <LevelSelector label="Sonno" icons={SLEEP_ICONS} value={form.sleep_quality} onChange={v => setForm(f => ({ ...f, sleep_quality: v }))} />}
-            {!form.planned_break && <LevelSelector label="Fiducia in te" icons={CONFIDENCE_ICONS} value={form.self_confidence} onChange={v => setForm(f => ({ ...f, self_confidence: v }))} />}
+            <LevelSelector label="Come ti senti" icons={MOOD_ICONS} labels={MOOD_LABELS} value={form.mood} onChange={v => setForm(f => ({ ...f, mood: v }))} />
+            <LevelSelector label="Energia" icons={ENERGY_ICONS} labels={ENERGY_LABELS} value={form.energy} onChange={v => setForm(f => ({ ...f, energy: v }))} />
+            {!form.planned_break && <LevelSelector label="Sonno" icons={SLEEP_ICONS} labels={SLEEP_LABELS} value={form.sleep_quality} onChange={v => setForm(f => ({ ...f, sleep_quality: v }))} />}
+            {!form.planned_break && <LevelSelector label="Fiducia in te" icons={CONFIDENCE_ICONS} labels={CONFIDENCE_LABELS} value={form.self_confidence} onChange={v => setForm(f => ({ ...f, self_confidence: v }))} />}
           </div>
 
           {!form.planned_break && (
