@@ -9,6 +9,8 @@ import type { useTrades, Trade } from '../lib/useTrades'
 // nel contesto pre-market spesso segnala aspettative fuori controllo (vedi FOMO/revenge).
 const NEGATIVE_EMOTIONS = ['fear', 'anxiety', 'insecure', 'frustration', 'hope', 'revenge', 'fomo']
 const MIN_SAMPLE = 5
+const MIN_ENTRIES = 10
+const TARGET_ENTRIES = 20
 
 interface Group { label: string; count: number; winRate: number; avgPnl: number }
 
@@ -130,23 +132,34 @@ export default function EmotionalInsights({ userId, tradesHook }: { userId: stri
         Non sono consigli: sono osservazioni oggettive calcolate sui tuoi dati. L'interpretazione resta tua.
       </div>
 
-      {entries.length < 10 && (
-        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--amber-dim)', color: 'var(--amber)', fontSize: 12, marginBottom: 16 }}>
-          Poche sessioni registrate finora: le correlazioni qui sotto sono indicative e diventeranno affidabili con più dati.
+      {entries.length === 0 ? (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--accent-dim)', color: 'var(--text-1)', fontSize: 12, marginBottom: 16 }}>
+          Registra il tuo primo check-in dal riquadro qui sopra. I pattern compariranno qui man mano.
         </div>
-      )}
+      ) : entries.length < TARGET_ENTRIES ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>
+            Check-in registrati: {entries.length}. Ne servono almeno ~{MIN_ENTRIES} per i primi pattern indicativi, ~{TARGET_ENTRIES} per correlazioni affidabili.
+          </div>
+          <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.min(100, (entries.length / TARGET_ENTRIES) * 100)}%`, background: 'var(--accent)', borderRadius: 3, transition: 'width 0.3s' }} />
+          </div>
+        </div>
+      ) : null}
 
-      {!hasAnyData ? (
-        <div style={{ fontSize: 13, color: 'var(--text-2)', fontStyle: 'italic' }}>
-          Le correlazioni compariranno qui man mano che registri check-in e accumuli trade.
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <CorrelationCard title="Sonno vs esito" groupA={sleepLow} groupB={sleepHigh} />
-          <CorrelationCard title="Fiducia in te vs esito" groupA={confLow} groupB={confHigh} />
-          <CorrelationCard title="Emozioni al check-in vs esito" groupA={negativeEmo} groupB={cleanEmo} />
-          <CorrelationCard title="Rientro dopo una pausa" groupA={afterGap} groupB={overall} />
-        </div>
+      {entries.length > 0 && (
+        hasAnyData ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 10 }}>
+            <CorrelationCard title="Sonno vs esito" groupA={sleepLow} groupB={sleepHigh} />
+            <CorrelationCard title="Fiducia in te vs esito" groupA={confLow} groupB={confHigh} />
+            <CorrelationCard title="Emozioni al check-in vs esito" groupA={negativeEmo} groupB={cleanEmo} />
+            <CorrelationCard title="Rientro dopo una pausa" groupA={afterGap} groupB={overall} />
+          </div>
+        ) : (
+          <div style={{ fontSize: 13, color: 'var(--text-2)', fontStyle: 'italic' }}>
+            Le correlazioni compariranno qui man mano che registri check-in e accumuli trade.
+          </div>
+        )
       )}
     </div>
   )

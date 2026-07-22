@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { authedFetch } from '../lib/supabase'
 import { EMOTION_TAGS } from './TradesAdvanced'
-import { marketDaysBetween, describeGap, parseDateKey } from '../lib/tradingDays'
+import { marketDaysBetween, describeGap, parseDateKey, isMarketDay } from '../lib/tradingDays'
 import EmotionalInsights from './EmotionalInsights'
 import type { useTrades } from '../lib/useTrades'
 
@@ -29,10 +29,26 @@ const ENERGY_ICONS = ['🪫', '🔋', '🔋', '🔋', '⚡']
 const SLEEP_ICONS = ['🌑', '🌒', '🌓', '🌔', '🌕']
 const CONFIDENCE_ICONS = ['😰', '😟', '😐', '🙂', '💪']
 
-function todayLocal(): string {
-  const d = new Date()
+function dateKey(d: Date): string {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+function todayLocal(): string {
+  return dateKey(new Date())
+}
+
+// Giorni di mercato strettamente tra due chiavi data (YYYY-MM-DD), estremi esclusi.
+function marketDayKeysBetween(fromKey: string, toKey: string): string[] {
+  const cur = parseDateKey(fromKey)
+  const end = parseDateKey(toKey)
+  cur.setDate(cur.getDate() + 1)
+  const days: string[] = []
+  while (cur < end) {
+    if (isMarketDay(cur)) days.push(dateKey(cur))
+    cur.setDate(cur.getDate() + 1)
+  }
+  return days
 }
 
 function LevelSelector({ label, icons, value, onChange }: { label: string; icons: string[]; value: number | null; onChange: (v: number) => void }) {
@@ -66,6 +82,9 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
   const [error, setError] = useState('')
   const [form, setForm] = useState<JournalEntry>({ ...EMPTY, entry_date: entryDate })
   const [gapBanner, setGapBanner] = useState<GapBanner | null>(null)
+  const [missingDays, setMissingDays] = useState<string[]>([])
+  const [markingBreaks, setMarkingBreaks] = useState(false)
+  const [missingDaysHandled, setMissingDaysHandled] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -93,6 +112,13 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
         const mkt = marketDaysBetween(parseDateKey(lastNonBreak.entry_date), parseDateKey(entryDate))
         const gap = describeGap(mkt)
         if (gap.level !== 'none') setGapBanner({ level: gap.level, label: gap.label, marketDays: mkt })
+
+        // Promemoria pause non segnate: solo se oggi non è ancora stato compilato
+        if (!data.entry) {
+          const knownDates = new Set(entries.map(e => e.entry_date))
+          const missing = marketDayKeysBetween(lastNonBreak.entry_date, entryDate).filter(d => !knownDates.has(d))
+          if (missing.length > 0) setMissingDays(missing)
+        }
       }
     } catch (e: any) {
       setError(e?.message || 'Errore di caricamento')
@@ -102,6 +128,24 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
   }, [userId, entryDate])
 
   useEffect(() => { load() }, [load])
+
+  const markMissingAsBreak = async () => {
+    setMarkingBreaks(true)
+    try {
+      for (const day of missingDays) {
+        await authedFetch('/api/premarket', {
+          method: 'POST',
+          body: JSON.stringify({ ...EMPTY, userId, entry_date: day, planned_break: true }),
+        })
+      }
+      setMissingDaysHandled(true)
+      setMissingDays([])
+    } catch (e: any) {
+      setError(e?.message || 'Errore nel salvataggio delle pause')
+    } finally {
+      setMarkingBreaks(false)
+    }
+  }
 
   const toggleEmotion = (id: string) => {
     setForm(f => ({ ...f, emotions: f.emotions.includes(id) ? f.emotions.filter(e => e !== id) : [...f.emotions, id] }))
@@ -131,7 +175,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div style={{ maxWidth: 1100 }}>
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color: 'var(--text-0)', marginBottom: 6 }}>
           ☀ Pre-Market
@@ -146,6 +190,24 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
           {gapBanner.level === 'long'
             ? <>Rientro dopo una pausa prolungata ({gapBanner.marketDays} giorni di mercato) — molti trader ripartono con size ridotta finché non ritrovano il ritmo. La scelta resta a te.</>
             : <>☀ Bentornato. {gapBanner.label}.</>}
+        </div>
+      )}
+
+      {missingDays.length > 0 && !saved && (
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', marginBottom: 16 }}>
+          <div style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.5, marginBottom: 10 }}>
+            Nei giorni scorsi risultano {missingDays.length} giorni di mercato senza check-in né pausa segnata. Se erano pause volontarie puoi segnarle, così le statistiche restano pulite.
+          </div>
+          <button onClick={markMissingAsBreak} disabled={markingBreaks}
+            style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: markingBreaks ? 'default' : 'pointer', fontSize: 12, fontWeight: 500, opacity: markingBreaks ? 0.6 : 1 }}>
+            {markingBreaks ? 'Salvataggio...' : 'Segna quei giorni come pausa'}
+          </button>
+        </div>
+      )}
+
+      {missingDaysHandled && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: 'var(--green-dim)', color: 'var(--green)', fontSize: 12, marginBottom: 16 }}>
+          ✓ Giorni segnati come pausa
         </div>
       )}
 
@@ -167,7 +229,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 12, marginBottom: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 18 }}>
             <SummaryStat label="Come ti senti" icon={form.mood ? MOOD_ICONS[form.mood - 1] : '—'} value={form.mood} />
             <SummaryStat label="Energia" icon={form.energy ? ENERGY_ICONS[form.energy - 1] : '—'} value={form.energy} />
             {!form.planned_break && <SummaryStat label="Sonno" icon={form.sleep_quality ? SLEEP_ICONS[form.sleep_quality - 1] : '—'} value={form.sleep_quality} />}
@@ -218,7 +280,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16 }}>
             <LevelSelector label="Come ti senti" icons={MOOD_ICONS} value={form.mood} onChange={v => setForm(f => ({ ...f, mood: v }))} />
             <LevelSelector label="Energia" icons={ENERGY_ICONS} value={form.energy} onChange={v => setForm(f => ({ ...f, energy: v }))} />
             {!form.planned_break && <LevelSelector label="Sonno" icons={SLEEP_ICONS} value={form.sleep_quality} onChange={v => setForm(f => ({ ...f, sleep_quality: v }))} />}
