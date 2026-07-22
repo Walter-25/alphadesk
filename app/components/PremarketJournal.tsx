@@ -25,9 +25,15 @@ const EMPTY: JournalEntry = {
 }
 
 const MOOD_ICONS = ['😞', '🙁', '😐', '🙂', '😄']
-const ENERGY_ICONS = ['🪫', '🔋', '🔋', '🔋', '⚡']
+const ENERGY_ICONS = ['🪫', '🔅', '🔆', '🔋', '⚡']
 const SLEEP_ICONS = ['🌑', '🌒', '🌓', '🌔', '🌕']
 const CONFIDENCE_ICONS = ['😰', '😟', '😐', '🙂', '💪']
+
+// Sottoinsieme di EMOTION_TAGS pertinente al PRIMA di operare: solo stati d'animo
+// d'arrivo, non i comportamenti-di-trade (FOMO, revenge, overtrading, ecc.) che
+// si taggano sul singolo trade in TradesAdvanced.
+const PREMARKET_EMOTION_IDS = ['fear', 'anxiety', 'insecure', 'undervalued', 'overconfident', 'euphoric', 'hope', 'frustration', 'serene', 'patient']
+const PREMARKET_EMOTIONS = EMOTION_TAGS.filter(t => PREMARKET_EMOTION_IDS.includes(t.id))
 
 function dateKey(d: Date): string {
   const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
@@ -290,8 +296,11 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
           {!form.planned_break && (
             <div>
               <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Emozioni</div>
+              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 10, lineHeight: 1.4 }}>
+                Come ti senti arrivando alla sessione (gli schemi operativi come FOMO o revenge si taggano invece sul singolo trade).
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                {EMOTION_TAGS.map(tag => (
+                {PREMARKET_EMOTIONS.map(tag => (
                   <button key={tag.id} onClick={() => toggleEmotion(tag.id)}
                     style={{ padding: '4px 9px', borderRadius: 5, border: `1px solid ${form.emotions.includes(tag.id) ? tag.color : 'var(--border)'}`, background: form.emotions.includes(tag.id) ? `${tag.color}22` : 'transparent', color: form.emotions.includes(tag.id) ? tag.color : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontWeight: form.emotions.includes(tag.id) ? 600 : 400 }}>
                     {tag.label}
