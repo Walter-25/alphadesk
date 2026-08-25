@@ -121,14 +121,18 @@ export async function POST(req: NextRequest) {
         ? brokerNetPnl
         : parseFloat((pnl - comm).toFixed(2))
       const ninjaId     = isV2
-        ? `bridge-${t.trade_uid}`
+        ? `${body.source === 'AtasBridge' ? 'atas' : 'bridge'}-${t.trade_uid}`
         : `ct-${account}-${t.trade_number || Date.now()}`
 
       const trade = {
         ninja_id: ninjaId,
         user_id: userId,
         account,
-        source: (body.source === 'AlphaDeskBridge' ? 'alphadesk_bridge' : 'coretrader_realtime'),
+        source: (
+          body.source === 'AtasBridge'        ? 'atas_bridge'
+          : body.source === 'AlphaDeskBridge' ? 'alphadesk_bridge'
+          : 'coretrader_realtime'
+        ),
         instrument: t.instrument_base || t.instrument || 'N/A',
         direction,
         entry_time: entryTime,
