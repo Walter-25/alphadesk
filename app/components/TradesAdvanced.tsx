@@ -4,7 +4,10 @@ import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
          ReferenceLine, CartesianGrid, PieChart, Pie, Cell, ScatterChart, Scatter, ZAxis } from 'recharts'
 import SyncPanel from './SyncPanel'
 import { parseNinjaTradeList, type Trade } from '../lib/csvParsers'
+import { parseAtasJournal, type AtasIngestPayload } from '../lib/atasJournalParser'
 import { authedFetch } from '../lib/supabase'
+
+const ATAS_TIMEZONE = 'Europe/Rome'
 
 // ─── TIPI ─────────────────────────────────────────────────────────────────────
 interface PerfReport {
@@ -1082,10 +1085,78 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     else setTrades(prev => prev.map(t => t.id===id?{...t,...updates}:t))
   }, [tradesHook])
 
+  // Import Journal ATAS (.xlsx): l'account e' letto dal file, non serve il campo "Nome conto".
+  // Passa per /api/ingest (stesso endpoint del Bridge live) cosi' il ninja_id, il fallback
+  // commissioni e l'upsert restano identici — zero logica duplicata lato server.
+  const handleAtasXlsx = useCallback(async (file: File) => {
+    if (!tradesHook) {
+      setImportMsg('⚠ Import ATAS richiede un account cloud (serve una API key AlphaDesk)')
+      setImporting(false)
+      return
+    }
+    let payloads: AtasIngestPayload[]
+    try {
+      const buf = await file.arrayBuffer()
+      payloads = parseAtasJournal(buf, { timeZone: ATAS_TIMEZONE, defaultStrategy: defaultStrategy.trim() })
+    } catch (e: any) {
+      setImportMsg(`⚠ File ATAS non valido: ${e.message}`)
+      setImporting(false)
+      return
+    }
+    if (!payloads.length) {
+      setImportMsg('⚠ Nessun trade trovato nel Journal ATAS')
+      setImporting(false)
+      return
+    }
+
+    // Recupera (o crea) la API key AlphaDesk dell'utente: /api/ingest si autentica con quella
+    let apiKey = ''
+    try {
+      const keysRes = await authedFetch(`/api/apikey?userId=${userId}`)
+      const keysJson = await keysRes.json()
+      apiKey = keysJson.keys?.[0]?.key || ''
+      if (!apiKey) {
+        const created = await authedFetch('/api/apikey', { method: 'POST', body: JSON.stringify({ userId, label: 'ATAS Import' }) })
+        const createdJson = await created.json()
+        apiKey = createdJson.key || ''
+      }
+    } catch {}
+    if (!apiKey) {
+      setImportMsg("⚠ Impossibile recuperare la API key AlphaDesk necessaria per l'import")
+      setImporting(false)
+      return
+    }
+
+    let ok = 0, fail = 0
+    for (const payload of payloads) {
+      try {
+        const res = await fetch('/api/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+          body: JSON.stringify(payload),
+        })
+        const json = await res.json().catch(() => ({}))
+        if (json.alphadesk) ok++; else fail++
+      } catch { fail++ }
+    }
+    const accountsImported = [...new Set(payloads.map(p => p.account))].join(', ')
+    setImportMsg(`✓ ${ok} trade importati dal Journal ATAS per "${accountsImported}"${fail ? ` · ${fail} falliti` : ''}`)
+    setSelectedAccounts(prev => Array.from(new Set([...prev, ...payloads.map(p => p.account)])))
+    await tradesHook.reload?.()
+    setImporting(false)
+  }, [userId, tradesHook, defaultStrategy])
+
   const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file||!accountName.trim()) { setImportMsg('⚠ Inserisci prima il nome del conto'); return }
+    if (!file) return
+    const isAtasXlsx = file.name.toLowerCase().endsWith('.xlsx')
+    if (!isAtasXlsx && !accountName.trim()) { setImportMsg('⚠ Inserisci prima il nome del conto'); return }
     setImporting(true); setImportMsg('')
+    if (isAtasXlsx) {
+      await handleAtasXlsx(file)
+      if (fileRef.current) fileRef.current.value=''
+      return
+    }
     const text = await file.text()
     // Auto-detect: se il file è un Performance Report mostra errore utile
     if (text.includes('Total net profit') && text.includes('Gross profit') && !text.includes('Entry time') && !text.includes('Entry price')) {
@@ -1135,7 +1206,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
     setSelectedAccounts([accountName.trim()])
     setImporting(false)
     if (fileRef.current) fileRef.current.value=''
-  }, [accountName, fileType, allTrades, tradesHook, defaultStrategy])
+  }, [accountName, fileType, allTrades, tradesHook, defaultStrategy, handleAtasXlsx])
 
   const lsKey = (type: string) => 'ad_' + type + '_' + (userId || 'guest')
   const lsSave = (type: string, data: any) => { try { localStorage.setItem(lsKey(type), JSON.stringify(data)) } catch {} }
@@ -1161,10 +1232,11 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
               {[...new Set(allTrades.map((t:Trade)=>t.strategy))].filter((s:any)=>s&&s!=='Manual').map((s:any) => <option key={s} value={s}/>)}
             </datalist>
             <div style={{fontSize:10,color:'var(--text-2)',marginBottom:10,lineHeight:1.5}}>Applicata ai trade importati che non hanno già una strategia propria. Modificabile poi sul singolo trade.</div>
-            <input ref={fileRef} type="file" accept=".csv,.txt" style={{display:'none'}} onChange={handleFile}/>
-            <button onClick={()=>fileRef.current?.click()} disabled={importing||!accountName.trim()} style={{width:'100%',padding:'8px',background:accountName.trim()?'var(--accent)':'var(--bg-4)',border:'none',borderRadius:8,color:accountName.trim()?'#000':'var(--text-2)',fontSize:13,fontWeight:600,cursor:accountName.trim()?'pointer':'not-allowed'}}>
-              {importing?'Importando...':'Seleziona file CSV'}
+            <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx" style={{display:'none'}} onChange={handleFile}/>
+            <button onClick={()=>fileRef.current?.click()} disabled={importing} style={{width:'100%',padding:'8px',background:'var(--accent)',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:600,cursor:importing?'not-allowed':'pointer'}}>
+              {importing?'Importando...':'Seleziona file CSV o .xlsx'}
             </button>
+            <div style={{fontSize:10,color:'var(--text-2)',marginTop:6,lineHeight:1.5}}>Per il .xlsx ATAS non serve compilare "Nome conto": viene letto dal file.</div>
             <div style={{marginTop:10}}>
               <button onClick={()=>setShowExportGuide(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'8px 10px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text-1)',fontSize:11,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
                 <span>{showExportGuide?'▼':'▶'}</span> 📖 Come esportare il CSV dalla tua piattaforma
@@ -1174,7 +1246,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                   {[
                     { id: 'nt8', label: 'NinjaTrader 8', text: 'Control Center → New → Trade Performance → seleziona conto e periodo → Generate → scheda Trades (o Executions) → tasto destro sulla tabella → Export → CSV.' },
                     { id: 'deepcharts', label: 'DeepCharts', text: "Apri il report delle performance/eseguiti → Export CSV. Il file ha colonne Symbol;DT;Quantity;Entry;Exit;ProfitLoss. Suggerimento: con il Watcher attivo (vedi tab Sync) l'import avviene da solo appena il file arriva nei Download." },
-                    { id: 'atas', label: 'ATAS', text: "Statistiche → tabella eseguiti/trade → Export CSV. ⚠ Il formato ATAS non è ancora supportato dall'import: stiamo aggiungendo il parser — se hai un export di esempio, contatta l'amministratore per accelerare." },
+                    { id: 'atas', label: 'ATAS', text: "Trading Journal → Export → .xlsx (foglio \"Journal\"). Carica direttamente il file .xlsx: l'account viene letto dal file, non serve compilare \"Nome conto\"." },
                   ].map(g => (
                     <div key={g.id} style={{background:'var(--bg-2)',borderRadius:6,overflow:'hidden'}}>
                       <button onClick={()=>setExpandedGuide(p=>p===g.id?null:g.id)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'6px 10px',background:'transparent',border:'none',color:'var(--text-1)',fontSize:11,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
