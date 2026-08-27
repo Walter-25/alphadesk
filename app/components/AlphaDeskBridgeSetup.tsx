@@ -36,6 +36,10 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
     setKeys(data.keys || [])
   }
 
+  // Default progressivo: la prima chiave non porta numero, dalla seconda in poi si
+  // numera in base a quante ne esistono gia', cosi' non collidono senza rinominarle a mano.
+  const nextKeyLabel = () => keys.length === 0 ? 'API Key AlphaDesk' : `API Key AlphaDesk ${keys.length + 1}`
+
   const generateKey = async () => {
     setGenerating(true)
     await authedFetch('/api/apikey', {
@@ -331,7 +335,7 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
                         <button onClick={cancelRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>✕</button>
                       </div>
                       <div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.4 }}>
-                        Etichetta globale, comune a tutte le piattaforme — usala solo per distinguere più chiavi tra loro, non per legarla a un broker.
+                        Il nome identifica il dispositivo o la persona che usa questa chiave (es. &quot;PC studio&quot;, &quot;Portatile&quot;, &quot;Marco&quot;) — non la piattaforma, perché la stessa chiave vale per tutte.
                       </div>
                     </div>
                   ) : (
@@ -355,11 +359,11 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla</div>
                 <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.4 }}>
-                  Questa chiave è unica e vale per tutte le piattaforme — il nome serve solo a distinguere più chiavi tra loro, non a legarle a un broker.
+                  Il nome identifica il dispositivo o la persona che usa questa chiave (es. &quot;PC studio&quot;, &quot;Portatile&quot;, &quot;Marco&quot;) — non la piattaforma, perché la stessa chiave vale per tutte.
                 </div>
               </div>
             ))}
-            <button onClick={() => { setLabel('API Key AlphaDesk'); setGenerating(true) }}
+            <button onClick={() => { setLabel(nextKeyLabel()); setGenerating(true) }}
               style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>
               + Aggiungi altra chiave
             </button>
