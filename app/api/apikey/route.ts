@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const key = generateKey()
-  const { error } = await sb.from('api_keys').insert({ user_id: userId, key, label: label || 'AlphaDesk' })
+  const { error } = await sb.from('api_keys').insert({ user_id: userId, key, label: label || 'API Key AlphaDesk' })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ key })
 }

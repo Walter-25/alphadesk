@@ -8,7 +8,7 @@ interface AliasRow { ntAccount: string; displayName: string }
 export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: { userId: string; mode?: 'nt8'|'watcher'|'atas'; onRecalculated?: () => void }) {
   const [keys, setKeys]             = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
-  const [label, setLabel]           = useState('AlphaDesk')
+  const [label, setLabel]           = useState('API Key AlphaDesk')
   const [copied, setCopied]         = useState('')
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
   const [aliasesSaved, setAliasesSaved] = useState(false)
@@ -322,12 +322,17 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
               <div key={k.id} style={{ background: 'var(--bg-3)', borderRadius: 9, padding: '10px 14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
                   {editingKeyId === k.id ? (
-                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
-                      <input value={editLabelValue} onChange={e => setEditLabelValue(e.target.value)} autoFocus
-                        onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') cancelRename() }}
-                        style={{ ...inp, flex: 1, padding: '4px 8px', fontSize: 12 }} />
-                      <button onClick={saveRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)', background: 'var(--accent-dim)', color: 'var(--accent)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✓</button>
-                      <button onClick={cancelRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <input value={editLabelValue} onChange={e => setEditLabelValue(e.target.value)} autoFocus
+                          onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') cancelRename() }}
+                          style={{ ...inp, flex: 1, padding: '4px 8px', fontSize: 12 }} />
+                        <button onClick={saveRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)', background: 'var(--accent-dim)', color: 'var(--accent)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✓</button>
+                        <button onClick={cancelRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                      </div>
+                      <div style={{ fontSize: 10, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                        Etichetta globale, comune a tutte le piattaforme — usala solo per distinguere più chiavi tra loro, non per legarla a un broker.
+                      </div>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -349,9 +354,12 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
                     style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>🗑</button>
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla</div>
+                <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4, lineHeight: 1.4 }}>
+                  Questa chiave è unica e vale per tutte le piattaforme — il nome serve solo a distinguere più chiavi tra loro, non a legarle a un broker.
+                </div>
               </div>
             ))}
-            <button onClick={() => { setLabel('AlphaDesk'); setGenerating(true) }}
+            <button onClick={() => { setLabel('API Key AlphaDesk'); setGenerating(true) }}
               style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>
               + Aggiungi altra chiave
             </button>
