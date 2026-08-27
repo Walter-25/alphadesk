@@ -812,6 +812,25 @@ function ScreenshotSlot({ trade, slot, path, onUpdate }: { trade: Trade; slot: 1
   )
 }
 
+// Campo numerico editabile per i dati del trade (Step "Dati trade" in TradeRow).
+// Accetta la virgola come separatore decimale, come il resto dell'app.
+function EditableNum({ label, value, onChange, onBlur, readOnly, color }: {
+  label: string; value: string; onChange?: (v: string) => void; onBlur?: () => void; readOnly?: boolean; color?: string
+}) {
+  return (
+    <div>
+      <div style={{fontSize:9,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:3,letterSpacing:'0.04em'}}>{label}</div>
+      {readOnly ? (
+        <div style={{padding:'6px 8px',fontFamily:'var(--font-mono)',fontSize:12,fontWeight:700,color:color||'var(--text-0)'}}>{value}</div>
+      ) : (
+        <input value={value} inputMode="decimal" onChange={e=>onChange?.(e.target.value)} onBlur={onBlur}
+          onKeyDown={e=>{ if(e.key==='Enter') (e.target as HTMLInputElement).blur() }}
+          style={{width:'100%',padding:'6px 8px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text-0)',fontSize:12,outline:'none',fontFamily:'var(--font-mono)',boxSizing:'border-box'}}/>
+      )}
+    </div>
+  )
+}
+
 function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void; knownStrategies?: string[] }) {
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<string[]>(trade.emotion_tags || [])
@@ -819,6 +838,11 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
   const [notes, setNotes] = useState(trade.notes || '')
   const [quality, setQuality] = useState(trade.setup_quality || 0)
   const [strategy, setStrategy] = useState(trade.strategy || '')
+  const [qty, setQty] = useState(String(trade.quantity ?? ''))
+  const [entryPrice, setEntryPrice] = useState(String(trade.entry_price ?? ''))
+  const [exitPrice, setExitPrice] = useState(String(trade.exit_price ?? ''))
+  const [commission, setCommission] = useState(String(trade.commission ?? ''))
+  const [pnl, setPnl] = useState(String(trade.pnl ?? ''))
 
   const toggleTag = (id: string) => { const n = tags.includes(id)?tags.filter(t=>t!==id):[...tags,id]; setTags(n); onUpdate(trade.id,{emotion_tags:n}) }
   const setR = (v: boolean) => { setRule(v); onUpdate(trade.id,{rule_followed:v}) }
@@ -827,6 +851,45 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
     const v = strategy.trim() || 'Manual'
     if (v !== trade.strategy) onUpdate(trade.id, { strategy: v })
     setStrategy(v)
+  }
+
+  // Editing manuale dei dati del trade: ogni campo salva al blur, passando sempre
+  // per onUpdate (PATCH via ninja_id) cosi' il valore corretto a mano sovrascrive
+  // quello calcolato/importato e resta persistito su Supabase.
+  const parseNum = (s: string) => parseFloat(s.replace(',', '.'))
+  const netPreview = (() => {
+    const p = parseNum(pnl), c = parseNum(commission)
+    return (isNaN(p) ? trade.pnl : p) - (isNaN(c) ? trade.commission : c)
+  })()
+  const saveQty = () => {
+    const v = parseNum(qty)
+    if (!isNaN(v) && v !== trade.quantity) onUpdate(trade.id, { quantity: v })
+  }
+  const saveEntryPrice = () => {
+    const v = parseNum(entryPrice)
+    if (!isNaN(v) && v !== trade.entry_price) onUpdate(trade.id, { entry_price: v })
+  }
+  const saveExitPrice = () => {
+    const v = parseNum(exitPrice)
+    if (!isNaN(v) && v !== trade.exit_price) onUpdate(trade.id, { exit_price: v })
+  }
+  // Commissione e P&L lordo condividono lo stesso ricalcolo: net_pnl = pnl - commissione,
+  // cosi' il P&L netto mostrato in lista resta sempre coerente con quanto modificato a mano.
+  const saveCommission = () => {
+    const v = parseNum(commission)
+    if (isNaN(v)) return
+    const grossNow = parseNum(pnl)
+    const gross = isNaN(grossNow) ? trade.pnl : grossNow
+    const net = parseFloat((gross - v).toFixed(2))
+    if (v !== trade.commission || net !== trade.net_pnl) onUpdate(trade.id, { commission: v, net_pnl: net })
+  }
+  const savePnl = () => {
+    const v = parseNum(pnl)
+    if (isNaN(v)) return
+    const commNow = parseNum(commission)
+    const comm = isNaN(commNow) ? trade.commission : commNow
+    const net = parseFloat((v - comm).toFixed(2))
+    if (v !== trade.pnl || net !== trade.net_pnl) onUpdate(trade.id, { pnl: v, net_pnl: net })
   }
 
   return (
@@ -884,12 +947,21 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
               <div style={{display:'flex',gap:4}}>
                 {[1,2,3,4,5].map(n => <div key={n} style={{fontSize:18,cursor:'pointer',opacity:quality>=n?1:0.25,color:'var(--amber)'}} onClick={()=>setQ(n)}>★</div>)}
               </div>
-              <div style={{marginTop:12,fontSize:11,color:'var(--text-2)',fontFamily:'var(--font-mono)'}}>
-                Entry: <span style={{color:'var(--text-0)'}}>{trade.entry_price||'—'}</span>{' '}
-                Exit: <span style={{color:'var(--text-0)'}}>{trade.exit_price||'—'}</span>
-                {trade.mae!=null&&<span>{' '}MAE: <span style={{color:'var(--red)'}}>-${Math.abs(trade.mae).toFixed(0)}</span></span>}
-                {trade.mfe!=null&&<span>{' '}MFE: <span style={{color:'var(--green)'}}>+${trade.mfe.toFixed(0)}</span></span>}
+              <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginTop:14,marginBottom:8,letterSpacing:'0.06em'}}>Dati trade</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <EditableNum label="Quantità" value={qty} onChange={setQty} onBlur={saveQty} />
+                <EditableNum label="Entry price" value={entryPrice} onChange={setEntryPrice} onBlur={saveEntryPrice} />
+                <EditableNum label="Exit price" value={exitPrice} onChange={setExitPrice} onBlur={saveExitPrice} />
+                <EditableNum label="P&L lordo" value={pnl} onChange={setPnl} onBlur={savePnl} />
+                <EditableNum label="Commissione" value={commission} onChange={setCommission} onBlur={saveCommission} />
+                <EditableNum label="P&L netto" value={`${netPreview>=0?'+':''}${netPreview.toFixed(2)}`} readOnly color={pc(netPreview)} />
               </div>
+              {(trade.mae!=null||trade.mfe!=null)&&(
+                <div style={{marginTop:8,fontSize:11,color:'var(--text-2)',fontFamily:'var(--font-mono)'}}>
+                  {trade.mae!=null&&<span>MAE: <span style={{color:'var(--red)'}}>-${Math.abs(trade.mae).toFixed(0)}</span></span>}
+                  {trade.mfe!=null&&<span>{' '}MFE: <span style={{color:'var(--green)'}}>+${trade.mfe.toFixed(0)}</span></span>}
+                </div>
+              )}
             </div>
             <div>
               <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginBottom:10,letterSpacing:'0.06em'}}>Note sul trade</div>

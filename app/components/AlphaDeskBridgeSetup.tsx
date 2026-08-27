@@ -21,6 +21,8 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
   const activeTab = mode || setupTab
   const [recalcLoading, setRecalcLoading] = useState(false)
   const [recalcMsg, setRecalcMsg]         = useState('')
+  const [editingKeyId, setEditingKeyId]   = useState<string|null>(null)
+  const [editLabelValue, setEditLabelValue] = useState('')
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -48,6 +50,19 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
     if (!confirm('Eliminare questa API key? Il plugin AlphaDesk Bridge smetterà di funzionare.')) return
     await authedFetch('/api/apikey', { method: 'DELETE', body: JSON.stringify({ id }) })
     loadKeys()
+  }
+
+  // Rinomina l'etichetta di una key esistente — serve anche a correggere etichette
+  // storiche come "NinjaTrader" assegnate prima che diventasse una chiave generica
+  // comune a tutte le piattaforme.
+  const startRename = (k: ApiKey) => { setEditingKeyId(k.id); setEditLabelValue(k.label) }
+  const cancelRename = () => setEditingKeyId(null)
+  const saveRename = async () => {
+    const v = editLabelValue.trim()
+    if (!editingKeyId || !v) { setEditingKeyId(null); return }
+    await authedFetch('/api/apikey', { method: 'PATCH', body: JSON.stringify({ id: editingKeyId, label: v }) })
+    setEditingKeyId(null)
+    await loadKeys()
   }
 
   const copy = (text: string, id: string) => {
@@ -305,9 +320,23 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {keys.map(k => (
               <div key={k.id} style={{ background: 'var(--bg-3)', borderRadius: 9, padding: '10px 14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-0)' }}>{k.label}</div>
-                  <div style={{ fontSize: 10, color: 'var(--text-2)' }}>creata il {new Date(k.created_at).toLocaleDateString('it-IT')}</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, gap: 8 }}>
+                  {editingKeyId === k.id ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                      <input value={editLabelValue} onChange={e => setEditLabelValue(e.target.value)} autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') cancelRename() }}
+                        style={{ ...inp, flex: 1, padding: '4px 8px', fontSize: 12 }} />
+                      <button onClick={saveRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--accent)', background: 'var(--accent-dim)', color: 'var(--accent)', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>✓</button>
+                      <button onClick={cancelRename} style={{ padding: '3px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-0)' }}>{k.label}</div>
+                      <button onClick={() => startRename(k)} title="Rinomina etichetta"
+                        style={{ padding: '1px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 10 }}>✏</button>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 10, color: 'var(--text-2)', whiteSpace: 'nowrap' }}>creata il {new Date(k.created_at).toLocaleDateString('it-IT')}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <input readOnly value={copied === k.id ? k.key : maskedKey(k)}
@@ -341,7 +370,7 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
       <div style={section}>
         <div style={stepLabel}>Commissioni per strumento (opzionale, comune a tutte le piattaforme)</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          Inserisci la commissione per contratto per ogni strumento. Usata solo se la piattaforma
+          Inserisci la commissione per contratto per ogni strumento, riferita al <strong style={{ color: 'var(--text-0)' }}>trade completo</strong> (apertura + chiusura), non al singolo ordine. Esempio: se il broker ti addebita 1,75 $ per lato, inserisci 3,50 $ (apertura + chiusura). Usata solo se la piattaforma
           non invia le commissioni automaticamente (es. Lucid, alcuni conti Tradovate prop, l&apos;import ATAS .xlsx che non porta mai la commissione).
         </div>
         <div style={{ fontSize: 11, color: 'var(--amber)', lineHeight: 1.6, background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px' }}>
@@ -350,7 +379,7 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
         <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
             <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Strumento (es. NQ)</div>
-            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Comm. per contratto ($)</div>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Comm. per contratto ($, trade completo)</div>
             <div />
           </div>
           {commMap.map((row, i) => (

@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!canAccess(authedUser, userId)) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
   const sb = admin()
   const key = generateKey()
-  const { error } = await sb.from('api_keys').insert({ user_id: userId, key, label: label || 'NinjaTrader' })
+  const { error } = await sb.from('api_keys').insert({ user_id: userId, key, label: label || 'AlphaDesk' })
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json({ key })
 }
@@ -28,6 +28,23 @@ export async function GET(req: NextRequest) {
   const sb = admin()
   const { data } = await sb.from('api_keys').select('id,key,label,created_at').eq('user_id', userId||'')
   return NextResponse.json({ keys: data || [] })
+}
+
+// PATCH — rinomina l'etichetta di una API key esistente (es. per correggere
+// etichette storiche tipo "NinjaTrader" assegnate prima che diventasse generica).
+export async function PATCH(req: NextRequest) {
+  const { id, label } = await req.json()
+  if (!id || !label || !String(label).trim()) return NextResponse.json({ error: 'id e label richiesti' }, { status: 400 })
+  const authedUser = await getAuthedUser(req)
+  if (!authedUser) return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
+  const sb = admin()
+  const { data: existing } = await sb.from('api_keys').select('user_id').eq('id', id).single()
+  if (!existing || !canAccess(authedUser, existing.user_id)) {
+    return NextResponse.json({ error: 'Non autorizzato' }, { status: 403 })
+  }
+  const { error } = await sb.from('api_keys').update({ label: String(label).trim() }).eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ success: true })
 }
 
 export async function DELETE(req: NextRequest) {
