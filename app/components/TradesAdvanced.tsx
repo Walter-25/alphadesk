@@ -971,7 +971,7 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
 
               <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',marginTop:14,marginBottom:10,letterSpacing:'0.06em'}}>Screenshot</div>
               <div style={{fontSize:10,color:'var(--text-2)',lineHeight:1.5,marginBottom:8}}>
-                Trascina o clicca su uno slot per caricare un'immagine. Con NinjaTrader puoi usare l'utility AlphaDesk Screenshot (Ctrl+Shift+1/2) — vedi tab Sync.
+                Trascina o clicca su uno slot per caricare un'immagine. Con NinjaTrader o ATAS in tempo reale puoi usare l'utility AlphaDesk Screenshot (Ctrl+Shift+1/2) — vedi tab Sync.
               </div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                 <ScreenshotSlot trade={trade} slot={1} path={trade.screenshot_1_url} onUpdate={onUpdate} />

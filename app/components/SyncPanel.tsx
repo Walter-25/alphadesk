@@ -70,7 +70,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           Puoi allegare fino a 2 immagini per ogni trade (grafici, setup, note visive).
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.6 }}>
-          ⚡ <strong style={{ color: 'var(--text-0)' }}>Con NinjaTrader 8 (in tempo reale)</strong>: usa l'utility AlphaDesk Screenshot. Scarica i file qui sotto, configurala con la tua API key, avviala e premi Ctrl+Shift+1 o Ctrl+Shift+2 mentre operi — cattura il monitor dove si trova il mouse e lo aggancia all'ultimo trade. Ideale quando il trade viene registrato subito dal Bridge.
+          ⚡ <strong style={{ color: 'var(--text-0)' }}>Con NinjaTrader 8 o ATAS (in tempo reale)</strong>: usa l'utility AlphaDesk Screenshot. Scarica i file qui sotto, configurala con la tua API key, avviala e premi Ctrl+Shift+1 o Ctrl+Shift+2 mentre operi — cattura il monitor dove si trova il mouse e lo aggancia all'ultimo trade. Funziona con qualsiasi Bridge in tempo reale: la scelta del trade non dipende dalla piattaforma, prende sempre il più recente arrivato.
         </div>
         <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.6 }}>
           📥 <strong style={{ color: 'var(--text-0)' }}>Con DeepCharts, ATAS o qualsiasi import CSV (a posteriori)</strong>: apri la sezione Eseguiti → Lista Trade, espandi il trade che ti interessa e nella sezione Screenshot in fondo trascina un'immagine (o clicca per selezionarla) direttamente sullo slot. È il modo giusto quando importi i trade la sera: salvi gli screenshot durante l'operatività (es. Win+Shift+S di Windows) in una cartella, e poi li associ ai trade dopo l'import.
@@ -81,7 +81,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           <a href="/AlphaDeskScreenshot.config.example.json" download="AlphaDeskScreenshot.config.example.json" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '9px 18px', background: 'var(--accent)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 700, textDecoration: 'none', width: 'fit-content' }}>⬇ AlphaDeskScreenshot.config.example.json</a>
         </div>
         <div style={{ fontSize: 12, color: 'var(--text-1)' }}>
-          L'utility hotkey serve solo per il flusso NinjaTrader in tempo reale — per gli import CSV non è necessaria.
+          L'utility hotkey vale per NinjaTrader 8 e ATAS (qualsiasi Bridge in tempo reale) — per gli import CSV/xlsx a posteriori usa invece il drag&amp;drop sul trade.
         </div>
       </div>
 
