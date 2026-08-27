@@ -62,13 +62,15 @@ export function useTrades(userId: string) {
       const tradesData = tradesJson.trades || null
       const tradesError = tradesJson.error || null
 
-      if (!tradesError && tradesData && tradesData.length > 0) {
-        // Il cloud (Supabase) è la fonte autorevole per note/tag/disciplina, ora che
-        // updateTrade li persiste via PATCH. Il locale serve solo come fallback per
-        // eventuali annotazioni non ancora sincronizzate (campo assente lato cloud).
-        // Un Map keyed per ninja_id||id sostituisce sempre la entry precedente invece
-        // di accodarla: un reload (o un import ripetuto) non impila mai copie, anche
-        // se localStorage aveva già accumulato duplicati in una sessione precedente.
+      if (!tradesError && tradesData) {
+        // Il cloud (Supabase) è la fonte autorevole sull'ESISTENZA dei trade: se la
+        // query è andata a buon fine (anche a vuoto), il risultato sostituisce lo
+        // stato, non lo estende. Il locale serve solo per riempire note/tag/disciplina
+        // non ancora sincronizzati sui trade che il cloud restituisce — MAI per
+        // reintrodurre trade che il cloud non ha (altrimenti una cancellazione
+        // dal cloud "torna indietro" al giro di reload successivo).
+        // Un Map keyed per ninja_id||id evita comunque di accodare copie se
+        // localStorage aveva già accumulato duplicati in una sessione precedente.
         const localMap = new Map(localTrades.map((t: Trade) => [t.ninja_id || t.id, t]))
         const byKey = new Map<string, Trade>()
         tradesData.forEach((t: any) => {
@@ -83,18 +85,13 @@ export function useTrades(userId: string) {
           if (t.setup_quality == null && local.setup_quality != null) fill.setup_quality = local.setup_quality
           byKey.set(key, Object.keys(fill).length ? { ...t, ...fill } : t)
         })
-        // Trade locali non ancora su cloud (solo se la key non esiste già)
-        localTrades.forEach((t: Trade) => {
-          const key = t.ninja_id || t.id
-          if (!byKey.has(key)) byKey.set(key, t)
-        })
         const merged = Array.from(byKey.values())
         setTrades(merged)
-        // Aggiorna localStorage con dati merged (deduplicati)
+        // Aggiorna localStorage con dati merged (deduplicati, allineati al cloud)
         try { localStorage.setItem('ad_trades_' + userId, JSON.stringify(merged)) } catch {}
-      } else if (localTrades.length > 0) {
-        // Supabase vuoto o errore — usa locale, deduplicato per key nel caso localStorage
-        // avesse già accumulato copie da reload precedenti al fix
+      } else if (tradesError && localTrades.length > 0) {
+        // La query cloud è fallita (non: "cloud vuoto") — qui sì ha senso il
+        // fallback sul locale, deduplicato per key.
         const byKey = new Map<string, Trade>()
         localTrades.forEach(t => byKey.set(t.ninja_id || t.id, t))
         setTrades(Array.from(byKey.values()))

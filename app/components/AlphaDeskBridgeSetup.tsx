@@ -5,7 +5,7 @@ import { authedFetch } from '../lib/supabase'
 interface ApiKey { id: string; key: string; label: string; created_at: string }
 interface AliasRow { ntAccount: string; displayName: string }
 
-export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string; mode?: 'nt8'|'watcher' }) {
+export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: { userId: string; mode?: 'nt8'|'watcher'|'atas'; onRecalculated?: () => void }) {
   const [keys, setKeys]             = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
   const [label, setLabel]           = useState('NinjaTrader')
@@ -17,8 +17,10 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
   const [commLoading, setCommLoading]   = useState(false)   // caricamento iniziale da DB
   const [commSaving, setCommSaving]     = useState(false)   // save button
   const [commSaveError, setCommSaveError] = useState('')
-  const [setupTab, setSetupTab]         = useState<'nt8'|'watcher'>('nt8')
+  const [setupTab, setSetupTab]         = useState<'nt8'|'watcher'|'atas'>('nt8')
   const activeTab = mode || setupTab
+  const [recalcLoading, setRecalcLoading] = useState(false)
+  const [recalcMsg, setRecalcMsg]         = useState('')
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -162,6 +164,33 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
     }
   }
 
+  // Le commissioni si applicano solo ai trade importati DOPO averle impostate: i trade
+  // già presenti non le prendono retroattivamente. Questo ricalcola i trade esistenti
+  // con commissione a 0 usando le tariffe salvate qui sopra, senza dover reimportare.
+  const recalcCommissions = async () => {
+    if (!confirm('Ricalcola la commissione (e il P&L netto) dei trade già importati che hanno commissione a 0, usando le tariffe salvate qui sopra?\n\nI trade con una commissione già valorizzata dal broker non vengono toccati.')) return
+    setRecalcLoading(true)
+    setRecalcMsg('')
+    try {
+      const res = await authedFetch('/api/commission-settings/recalculate', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Errore ricalcolo')
+      setRecalcMsg(
+        data.updated > 0
+          ? `✓ ${data.updated} trade aggiornati`
+          : 'Nessun trade da aggiornare — nessun trade con commissione a 0 corrisponde a uno strumento configurato'
+      )
+      if (data.updated > 0) onRecalculated?.()
+    } catch (e: unknown) {
+      setRecalcMsg(`⚠ ${e instanceof Error ? e.message : 'Errore ricalcolo'}`)
+    } finally {
+      setRecalcLoading(false)
+    }
+  }
+
   const commMapString = commMap
     .filter(r => r.instrument.trim() && r.commission.trim())
     .map(r => r.instrument.trim().toUpperCase() + '=' + r.commission.trim())
@@ -220,24 +249,39 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
                 color: setupTab === 'watcher' ? '#000' : 'var(--text-1)' }}>
               📄 DeepCharts / CSV — Watcher
             </button>
+            <button onClick={() => setSetupTab('atas')}
+              style={{ flex: 1, padding: '10px 14px', borderRadius: 9, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                background: setupTab === 'atas' ? 'var(--accent)' : 'var(--bg-3)',
+                color: setupTab === 'atas' ? '#000' : 'var(--text-1)' }}>
+              📈 ATAS — Bridge automatico
+            </button>
           </div>
         </>
       )}
 
       {/* Box introduttivo "cosa fa" — sempre in cima alla guida attiva, prima dello Step 1 */}
       <div style={{ ...section, borderColor: 'rgba(0,212,170,0.3)', background: 'var(--accent-dim)' }}>
-        {activeTab === 'nt8' ? (
+        {activeTab === 'nt8' && (
           <>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>⚡ AlphaDesk Bridge — cos&apos;è</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
               Un plugin che gira dentro NinjaTrader 8: ogni trade chiuso viene inviato automaticamente ad AlphaDesk in tempo reale, su qualsiasi conto (simulato, prop, live). Si installa una volta sola, poi non richiede alcuna azione.
             </div>
           </>
-        ) : (
+        )}
+        {activeTab === 'watcher' && (
           <>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>📄 AlphaDesk Watcher — cos&apos;è</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
               Un piccolo programma che monitora la cartella Download del PC: quando esporti un CSV dalla tua piattaforma (attualmente DeepCharts), lo importa da solo in AlphaDesk e archivia il file. Nessuna credenziale della piattaforma, nessuna installazione al suo interno.
+            </div>
+          </>
+        )}
+        {activeTab === 'atas' && (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-0)' }}>📈 AlphaDesk Bridge per ATAS — cos&apos;è</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.7 }}>
+              Un indicatore che gira dentro ATAS (Classic e ATAS X): ogni trade chiuso viene inviato automaticamente ad AlphaDesk, su qualsiasi conto (simulato, prop, live). Si installa una volta sola, poi non richiede alcuna azione.
             </div>
           </>
         )}
@@ -291,6 +335,69 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
             )}
           </div>
         )}
+      </div>
+
+      {/* Commissioni per strumento — comune a tutte le piattaforme (NT8, Watcher, import ATAS .xlsx) */}
+      <div style={section}>
+        <div style={stepLabel}>Commissioni per strumento (opzionale, comune a tutte le piattaforme)</div>
+        <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+          Inserisci la commissione per contratto per ogni strumento. Usata solo se la piattaforma
+          non invia le commissioni automaticamente (es. Lucid, alcuni conti Tradovate prop, l&apos;import ATAS .xlsx che non porta mai la commissione).
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--amber)', lineHeight: 1.6, background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px' }}>
+          ⚠ Si applica solo ai trade importati <strong>dopo</strong> aver salvato le tariffe qui sotto — i trade già presenti non la prendono retroattivamente. Per quelli già importati usa &quot;Ricalcola commissioni sui trade esistenti&quot; in fondo, senza bisogno di reimportare.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Strumento (es. NQ)</div>
+            <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Comm. per contratto ($)</div>
+            <div />
+          </div>
+          {commMap.map((row, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
+              <input value={row.instrument} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, instrument: e.target.value } : r))}
+                placeholder="es. NQ" style={inp} />
+              <input value={row.commission} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, commission: e.target.value } : r))}
+                placeholder="es. 5.76" style={inp} />
+              <button onClick={() => setCommMap(m => m.filter((_, idx) => idx !== i))} disabled={commMap.length === 1}
+                style={{ padding: '4px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: commMap.length === 1 ? 'transparent' : 'var(--red-dim)', color: commMap.length === 1 ? 'var(--text-2)' : 'var(--red)', cursor: commMap.length === 1 ? 'default' : 'pointer', fontSize: 13 }}>✕</button>
+            </div>
+          ))}
+          <button onClick={() => setCommMap(m => [...m, { instrument: '', commission: '' }])}
+            style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11, textAlign: 'left' as const }}>
+            + Aggiungi strumento
+          </button>
+          {commMapString && (
+            <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
+              {commMapString}
+            </div>
+          )}
+          <button onClick={saveCommMap} disabled={commSaving}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none',
+              background: commSaved ? 'var(--green-dim)' : 'var(--bg-3)',
+              color: commSaved ? 'var(--green)' : commSaving ? 'var(--text-2)' : 'var(--text-1)',
+              fontWeight: 700, cursor: commSaving ? 'not-allowed' : 'pointer',
+              fontSize: 12, width: 'fit-content' }}>
+            {commSaving ? '⟳ Salvando...' : commSaved ? '✓ Salvato' : '💾 Salva commissioni'}
+          </button>
+          {commSaveError && (
+            <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>
+              ⚠ {commSaveError} — impostazioni salvate in locale
+            </div>
+          )}
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: 6, paddingTop: 10, display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
+            <button onClick={recalcCommissions} disabled={recalcLoading || commMap.every(r => !r.instrument.trim() || !r.commission.trim())}
+              style={{ padding: '7px 16px', borderRadius: 7, border: '1px solid var(--border)',
+                background: 'transparent', color: recalcLoading ? 'var(--text-2)' : 'var(--text-1)',
+                fontWeight: 700, cursor: recalcLoading ? 'not-allowed' : 'pointer',
+                fontSize: 12, width: 'fit-content' }}>
+              {recalcLoading ? '⟳ Ricalcolo in corso...' : '🔄 Ricalcola commissioni sui trade esistenti'}
+            </button>
+            {recalcMsg && (
+              <div style={{ fontSize: 11, color: recalcMsg.startsWith('⚠') ? 'var(--red)' : 'var(--green)' }}>{recalcMsg}</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {activeTab === 'nt8' && (
@@ -371,54 +478,6 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Step 3: Commission Map */}
-          <div style={section}>
-            <div style={stepLabel}>Step 3 — Commissioni per strumento (opzionale)</div>
-            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-              Inserisci la commissione per contratto per ogni strumento. Usata solo se il tuo broker
-              non invia le commissioni automaticamente (es. Lucid, alcuni conti Tradovate prop).
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 6 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
-                <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Strumento (es. NQ)</div>
-                <div style={{ fontSize: 10, color: 'var(--text-2)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const }}>Comm. per contratto ($)</div>
-                <div />
-              </div>
-              {commMap.map((row, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
-                  <input value={row.instrument} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, instrument: e.target.value } : r))}
-                    placeholder="es. NQ" style={inp} />
-                  <input value={row.commission} onChange={e => setCommMap(m => m.map((r, idx) => idx === i ? { ...r, commission: e.target.value } : r))}
-                    placeholder="es. 5.76" style={inp} />
-                  <button onClick={() => setCommMap(m => m.filter((_, idx) => idx !== i))} disabled={commMap.length === 1}
-                    style={{ padding: '4px', borderRadius: 6, border: '1px solid rgba(255,77,109,0.3)', background: commMap.length === 1 ? 'transparent' : 'var(--red-dim)', color: commMap.length === 1 ? 'var(--text-2)' : 'var(--red)', cursor: commMap.length === 1 ? 'default' : 'pointer', fontSize: 13 }}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => setCommMap(m => [...m, { instrument: '', commission: '' }])}
-                style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11, textAlign: 'left' as const }}>
-                + Aggiungi strumento
-              </button>
-              {commMapString && (
-                <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
-                  {commMapString}
-                </div>
-              )}
-              <button onClick={saveCommMap} disabled={commSaving}
-                style={{ padding: '7px 16px', borderRadius: 7, border: 'none',
-                  background: commSaved ? 'var(--green-dim)' : 'var(--bg-3)',
-                  color: commSaved ? 'var(--green)' : commSaving ? 'var(--text-2)' : 'var(--text-1)',
-                  fontWeight: 700, cursor: commSaving ? 'not-allowed' : 'pointer',
-                  fontSize: 12, width: 'fit-content' }}>
-                {commSaving ? '⟳ Salvando...' : commSaved ? '✓ Salvato' : '💾 Salva commissioni'}
-              </button>
-              {commSaveError && (
-                <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 2 }}>
-                  ⚠ {commSaveError} — impostazioni salvate in locale
                 </div>
               )}
             </div>
@@ -521,6 +580,38 @@ export default function AlphaDeskBridgeSetup({ userId, mode }: { userId: string;
             <div style={stepLabel}>Step 6 — Verifica</div>
             <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
               Con la finestra del watcher aperta, esporta (o trascina nei Download) un CSV DeepCharts: deve apparire una riga verde &quot;importati X, saltati Y&quot; e il trade deve comparire in Eseguiti selezionando il conto configurato.
+            </div>
+          </div>
+        </>
+      )}
+
+      {activeTab === 'atas' && (
+        <>
+          {/* Step 2: Installa l'indicatore */}
+          <div style={section}>
+            <div style={stepLabel}>Step 2 — Installa l&apos;indicatore</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              Scarica <strong style={{ color: 'var(--text-0)' }}>AlphaDeskBridge.dll</strong> e copialo nella cartella indicatori di ATAS:
+            </div>
+            <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '4px 8px', borderRadius: 4, color: 'var(--text-1)' }}>
+              %APPDATA%\ATAS\Indicators
+            </code>
+            <div style={{ fontSize: 11, color: 'var(--text-2)' }}>
+              (su ATAS X: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 4 }}>%APPDATA%\ATAS X\Indicators</code>)
+            </div>
+            <a href="/AlphaDeskBridge.dll" download="AlphaDeskBridge.dll" style={downloadBtn}>
+              ⬇ Scarica AlphaDeskBridge.dll
+            </a>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6, marginTop: 4 }}>
+              Poi in ATAS: apri un qualsiasi grafico → aggiungi indicatore → cerca <strong style={{ color: 'var(--text-0)' }}>AlphaDesk Bridge</strong> → nelle proprietà dell&apos;indicatore incolla la tua <strong style={{ color: 'var(--text-0)' }}>API Key</strong> (Step 1) e attiva <strong style={{ color: 'var(--text-0)' }}>Backfill all&apos;avvio</strong>: la prima volta invia anche lo storico già presente, non solo i nuovi trade.
+            </div>
+          </div>
+
+          {/* Step 3: Verifica */}
+          <div style={section}>
+            <div style={stepLabel}>Step 3 — Verifica</div>
+            <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+              Chiudi un trade (va bene anche su un conto simulato): entro pochi secondi deve comparire in <strong>Eseguiti → Lista Trade</strong>. Se non arriva nulla, verifica nelle proprietà dell&apos;indicatore che l&apos;API Key sia corretta e che <strong>API URL</strong> punti a <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '1px 6px', borderRadius: 4 }}>{endpointUrl}</code>.
             </div>
           </div>
         </>

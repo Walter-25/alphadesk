@@ -1236,7 +1236,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
             <button onClick={()=>fileRef.current?.click()} disabled={importing} style={{width:'100%',padding:'8px',background:'var(--accent)',border:'none',borderRadius:8,color:'#000',fontSize:13,fontWeight:600,cursor:importing?'not-allowed':'pointer'}}>
               {importing?'Importando...':'Seleziona file CSV o .xlsx'}
             </button>
-            <div style={{fontSize:10,color:'var(--text-2)',marginTop:6,lineHeight:1.5}}>Per il .xlsx ATAS non serve compilare "Nome conto": viene letto dal file.</div>
+            <div style={{fontSize:10,color:'var(--text-2)',marginTop:6,lineHeight:1.5}}>Per il .xlsx ATAS non serve compilare "Nome conto": viene letto dal file. ATAS non esporta mai la commissione — <button onClick={()=>setTab('sync')} style={{color:'var(--accent)',background:'transparent',border:'none',cursor:'pointer',padding:0,fontSize:10,textDecoration:'underline'}}>configurala per strumento in Sync →</button></div>
             <div style={{marginTop:10}}>
               <button onClick={()=>setShowExportGuide(v=>!v)} style={{display:'flex',alignItems:'center',gap:6,width:'100%',padding:'8px 10px',background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:6,color:'var(--text-1)',fontSize:11,fontWeight:500,cursor:'pointer',textAlign:'left'}}>
                 <span>{showExportGuide?'▼':'▶'}</span> 📖 Come esportare il CSV dalla tua piattaforma

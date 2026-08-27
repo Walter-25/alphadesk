@@ -66,23 +66,23 @@ function marketDayKeysBetween(fromKey: string, toKey: string): string[] {
 function LevelSelector({ label, icons, labels, value, onChange }: { label: string; icons: string[]; labels?: string[]; value: number | null; onChange: (v: number) => void }) {
   return (
     <div>
-      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em', fontWeight: 600 }}>{label}</div>
       <div style={{ display: 'flex', gap: 6 }}>
         {icons.map((icon, i) => {
           const n = i + 1
           const active = value === n
           return (
             <button key={n} onClick={() => onChange(n)} title={labels ? labels[i] : undefined}
-              style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-dim)' : 'var(--bg-2)', cursor: 'pointer', fontSize: 20, opacity: active ? 1 : 0.5, transition: 'all 0.15s' }}>
+              style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent-dim)' : 'var(--bg-2)', cursor: 'pointer', fontSize: 28, opacity: active ? 1 : 0.65, transition: 'all 0.15s' }}>
               {icon}
             </button>
           )
         })}
       </div>
       {labels && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 9, color: 'var(--text-2)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 11, color: 'var(--text-1)' }}>
           <span>{labels[0]}</span>
-          <span style={{ color: value ? 'var(--accent)' : 'var(--text-2)', fontWeight: value ? 600 : 400 }}>{value ? labels[value - 1] : ''}</span>
+          <span style={{ color: value ? 'var(--accent)' : 'var(--text-1)', fontWeight: value ? 700 : 500 }}>{value ? labels[value - 1] : ''}</span>
           <span>{labels[labels.length - 1]}</span>
         </div>
       )}
@@ -190,7 +190,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
   }
 
   if (loading) {
-    return <div style={{ fontSize: 13, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>Caricamento...</div>
+    return <div style={{ fontSize: 13, color: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}>Caricamento...</div>
   }
 
   return (
@@ -199,13 +199,13 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
         <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 22, color: 'var(--text-0)', marginBottom: 6 }}>
           ☀ Pre-Market
         </div>
-        <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.5 }}>
           Un momento prima di operare per fotografare come arrivi alla sessione. Serve a te, per riconoscere i tuoi pattern nel tempo.
         </div>
       </div>
 
       {gapBanner && (
-        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--accent-dim)', color: 'var(--text-1)', fontSize: 12.5, lineHeight: 1.5, marginBottom: 16, border: '1px solid var(--accent)' }}>
+        <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--accent-dim)', color: 'var(--text-1)', fontSize: 14, lineHeight: 1.5, marginBottom: 16, border: '1px solid var(--accent)' }}>
           {gapBanner.level === 'long'
             ? <>Rientro dopo una pausa prolungata ({gapBanner.marketDays} giorni di mercato) — molti trader ripartono con size ridotta finché non ritrovano il ritmo. La scelta resta a te.</>
             : <>☀ Bentornato. {gapBanner.label}.</>}
@@ -214,11 +214,11 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 
       {missingDays.length > 0 && !saved && (
         <div style={{ padding: '12px 16px', borderRadius: 8, background: 'var(--bg-3)', border: '1px solid var(--border)', marginBottom: 16 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--text-1)', lineHeight: 1.5, marginBottom: 10 }}>
+          <div style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.5, marginBottom: 10 }}>
             Nei giorni scorsi risultano {missingDays.length} giorni di mercato senza check-in né pausa segnata. Se erano pause volontarie puoi segnarle, così le statistiche restano pulite.
           </div>
           <button onClick={markMissingAsBreak} disabled={markingBreaks}
-            style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: markingBreaks ? 'default' : 'pointer', fontSize: 12, fontWeight: 500, opacity: markingBreaks ? 0.6 : 1 }}>
+            style={{ padding: '7px 14px', borderRadius: 7, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: markingBreaks ? 'default' : 'pointer', fontSize: 13, fontWeight: 600, opacity: markingBreaks ? 0.6 : 1 }}>
             {markingBreaks ? 'Salvataggio...' : 'Segna quei giorni come pausa'}
           </button>
         </div>
@@ -243,7 +243,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
           </div>
 
           {form.planned_break && (
-            <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 16 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-1)', marginBottom: 16 }}>
               Giornata marcata come pausa volontaria — non verrà contata come sessione saltata.
             </div>
           )}
@@ -257,7 +257,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 
           {form.emotions.length > 0 && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em' }}>Emozioni</div>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em', fontWeight: 600 }}>Emozioni</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
                 {form.emotions.map(id => {
                   const tag = EMOTION_TAGS.find(t => t.id === id)
@@ -269,15 +269,15 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 
           {form.life_events && (
             <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em' }}>Cosa è successo prima di operare</div>
-              <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{form.life_events}</div>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em', fontWeight: 600 }}>Cosa è successo prima di operare</div>
+              <div style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{form.life_events}</div>
             </div>
           )}
 
           {!form.planned_break && form.intention && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em' }}>Intenzione per la sessione</div>
-              <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{form.intention}</div>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.06em', fontWeight: 600 }}>Intenzione per la sessione</div>
+              <div style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{form.intention}</div>
             </div>
           )}
 
@@ -294,7 +294,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
               <span style={{ fontSize: 18 }}>{form.planned_break ? '☑' : '☐'}</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: form.planned_break ? 'var(--accent)' : 'var(--text-1)' }}>Oggi è un giorno di pausa pianificata (non opero)</span>
             </button>
-            <div style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 6, lineHeight: 1.4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-1)', marginTop: 6, lineHeight: 1.4 }}>
               Segna le pause volontarie così non vengono contate come sessioni saltate.
             </div>
           </div>
@@ -308,14 +308,14 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 
           {!form.planned_break && (
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Emozioni</div>
-              <div style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 10, lineHeight: 1.4 }}>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em', fontWeight: 600 }}>Emozioni</div>
+              <div style={{ fontSize: 12, color: 'var(--text-1)', marginBottom: 10, lineHeight: 1.4 }}>
                 Come ti senti arrivando alla sessione (gli schemi operativi come FOMO o revenge si taggano invece sul singolo trade).
               </div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {PREMARKET_EMOTIONS.map(tag => (
                   <button key={tag.id} onClick={() => toggleEmotion(tag.id)}
-                    style={{ padding: '4px 9px', borderRadius: 5, border: `1px solid ${form.emotions.includes(tag.id) ? tag.color : 'var(--border)'}`, background: form.emotions.includes(tag.id) ? `${tag.color}22` : 'transparent', color: form.emotions.includes(tag.id) ? tag.color : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontWeight: form.emotions.includes(tag.id) ? 600 : 400 }}>
+                    style={{ padding: '5px 10px', borderRadius: 5, border: `1px solid ${form.emotions.includes(tag.id) ? tag.color : 'var(--border)'}`, background: form.emotions.includes(tag.id) ? `${tag.color}22` : 'transparent', color: form.emotions.includes(tag.id) ? tag.color : 'var(--text-1)', cursor: 'pointer', fontSize: 12, fontWeight: form.emotions.includes(tag.id) ? 700 : 500 }}>
                     {tag.label}
                   </button>
                 ))}
@@ -324,7 +324,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
           )}
 
           <div>
-            <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Cosa è successo prima di operare oggi?</div>
+            <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em', fontWeight: 600 }}>Cosa è successo prima di operare oggi?</div>
             <textarea value={form.life_events} onChange={e => setForm(f => ({ ...f, life_events: e.target.value }))}
               placeholder="Eventi, imprevisti, discussioni, notizie che ti hanno toccato..."
               style={{ width: '100%', height: 80, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 13, padding: '10px 12px', resize: 'none', fontFamily: 'var(--font-body)', outline: 'none' }} />
@@ -332,7 +332,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 
           {!form.planned_break && (
             <div>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em' }}>Intenzione per la sessione</div>
+              <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', marginBottom: 10, letterSpacing: '0.06em', fontWeight: 600 }}>Intenzione per la sessione</div>
               <textarea value={form.intention} onChange={e => setForm(f => ({ ...f, intention: e.target.value }))}
                 placeholder="Cosa vuoi portare con te in questa sessione..."
                 style={{ width: '100%', height: 80, background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 7, color: 'var(--text-0)', fontSize: 13, padding: '10px 12px', resize: 'none', fontFamily: 'var(--font-body)', outline: 'none' }} />
@@ -346,7 +346,7 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
             </button>
             {saved && (
               <button onClick={() => setEditing(false)}
-                style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 13 }}>
+                style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-1)', cursor: 'pointer', fontSize: 13 }}>
                 Annulla
               </button>
             )}
@@ -366,9 +366,9 @@ export default function PremarketJournal({ userId, tradesHook }: { userId: strin
 function SummaryStat({ label, icon, value }: { label: string; icon: string; value: number | null }) {
   return (
     <div style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 10px', textAlign: 'center' }}>
-      <div style={{ fontSize: 22, marginBottom: 6 }}>{icon}</div>
-      <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ fontSize: 11, color: 'var(--text-1)', marginTop: 2 }}>{value ?? '—'}/5</div>
+      <div style={{ fontSize: 30, marginBottom: 6 }}>{icon}</div>
+      <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{label}</div>
+      <div style={{ fontSize: 13, color: 'var(--text-1)', marginTop: 2, fontWeight: 600 }}>{value ?? '—'}/5</div>
     </div>
   )
 }

@@ -46,12 +46,12 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
     { id: 'ninjatrader', label: 'NinjaTrader 8', icon: '⚡', color: '#f5a623', desc: 'Bridge — tempo reale' },
     { id: 'watcher', label: 'Watcher CSV', icon: '📄', color: '#00d4aa', desc: 'DeepCharts — semi-automatico' },
     { id: 'interactive_brokers', label: 'Interactive Brokers', icon: '🏦', color: '#9b59b6', desc: 'FlexQuery — non ancora collaudato' },
-    { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Bridge in valutazione' },
+    { id: 'atas', label: 'ATAS', icon: '📈', color: '#4a6278', desc: 'Bridge — tempo reale' },
   ]
 
-  const isDisabled = (id: string) => id === 'atas'
   const lastSync = (acc: string) => syncs.find(s => s.account === acc)
-  const showBridgeSetup = selectedBroker === 'ninjatrader' || selectedBroker === 'watcher'
+  const showBridgeSetup = selectedBroker === 'ninjatrader' || selectedBroker === 'watcher' || selectedBroker === 'atas'
+  const bridgeMode = selectedBroker === 'ninjatrader' ? 'nt8' : selectedBroker === 'atas' ? 'atas' : 'watcher'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -59,6 +59,20 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
       {/* Modi per portare i trade in AlphaDesk */}
       <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, padding: '10px 14px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
         Modi per portare i trade in AlphaDesk: ⚡ Bridge NT8 (tempo reale, automatico) · 📄 Watcher CSV (semi-automatico, oggi DeepCharts) · 🏦 IBKR FlexQuery · 📥 import manuale dalla tab Import. Questa lista cresce man mano che aggiungiamo integrazioni.
+      </div>
+
+      {/* ATAS: bridge live (indicatore) + import storico .xlsx dalla tab Import — entrambi usano la stessa tabella commissioni */}
+      <div style={{ fontSize: 11, color: 'var(--text-2)', lineHeight: 1.7, padding: '10px 14px', background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 10 }}>
+        📈 <strong style={{ color: 'var(--text-0)' }}>ATAS</strong>: qui sotto trovi il Bridge in tempo reale (indicatore). Per lo storico già passato puoi anche importare il Trading Journal (.xlsx) dalla tab <strong style={{ color: 'var(--text-0)' }}>Import</strong>. In entrambi i casi ATAS non include mai la commissione: imposta le tariffe per strumento nella sezione &quot;Commissioni per strumento&quot; qui sotto (comune a tutte le piattaforme) — vale anche per i trade già importati, tramite &quot;Ricalcola commissioni sui trade esistenti&quot;.
+        {selectedBroker !== 'atas' && (
+          <>
+            {' '}
+            <button onClick={() => setSelectedBroker('atas')}
+              style={{ color: 'var(--accent)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, textDecoration: 'underline' }}>
+              Vai al Bridge ATAS →
+            </button>
+          </>
+        )}
       </div>
 
       {/* Screenshot dei trade — guida statica, sempre visibile */}
@@ -92,14 +106,13 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 4 }}>Broker</div>
             {BROKERS.map(b => (
-              <button key={b.id} onClick={() => !isDisabled(b.id) && setSelectedBroker(b.id)}
-                disabled={isDisabled(b.id)}
+              <button key={b.id} onClick={() => setSelectedBroker(b.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8,
                   border: `1px solid ${selectedBroker === b.id ? b.color : 'var(--border)'}`,
                   background: selectedBroker === b.id ? `${b.color}15` : 'transparent',
-                  color: isDisabled(b.id) ? 'var(--text-2)' : 'var(--text-0)',
-                  cursor: isDisabled(b.id) ? 'not-allowed' : 'pointer',
-                  opacity: isDisabled(b.id) ? 0.4 : 1, textAlign: 'left' }}>
+                  color: 'var(--text-0)',
+                  cursor: 'pointer',
+                  opacity: 1, textAlign: 'left' }}>
                 <span style={{ fontSize: 14 }}>{b.icon}</span>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{b.label}</div>
@@ -112,7 +125,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           {/* Setup AlphaDesk Bridge / Watcher */}
           <div>
             {userId
-              ? <AlphaDeskBridgeSetup userId={userId} mode={selectedBroker === 'ninjatrader' ? 'nt8' : 'watcher'} />
+              ? <AlphaDeskBridgeSetup userId={userId} mode={bridgeMode} onRecalculated={onReload} />
               : <div style={{ background: 'var(--bg-2)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, textAlign: 'center', color: 'var(--text-2)', fontSize: 13 }}>
                   Effettua il login per configurare il plugin.
                 </div>
@@ -128,14 +141,13 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', marginBottom: 4 }}>Broker</div>
             {BROKERS.map(b => (
-              <button key={b.id} onClick={() => !isDisabled(b.id) && setSelectedBroker(b.id)}
-                disabled={isDisabled(b.id)}
+              <button key={b.id} onClick={() => setSelectedBroker(b.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8,
                   border: `1px solid ${selectedBroker === b.id ? b.color : 'var(--border)'}`,
                   background: selectedBroker === b.id ? `${b.color}15` : 'transparent',
-                  color: isDisabled(b.id) ? 'var(--text-2)' : 'var(--text-0)',
-                  cursor: isDisabled(b.id) ? 'not-allowed' : 'pointer',
-                  opacity: isDisabled(b.id) ? 0.4 : 1, textAlign: 'left' }}>
+                  color: 'var(--text-0)',
+                  cursor: 'pointer',
+                  opacity: 1, textAlign: 'left' }}>
                 <span style={{ fontSize: 14 }}>{b.icon}</span>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{b.label}</div>
