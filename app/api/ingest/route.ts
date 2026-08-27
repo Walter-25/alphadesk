@@ -123,6 +123,13 @@ export async function POST(req: NextRequest) {
       const ninjaId     = isV2
         ? `${body.source === 'AtasBridge' ? 'atas' : 'bridge'}-${t.trade_uid}`
         : `ct-${account}-${t.trade_number || Date.now()}`
+      // Etichetta broker mostrata in "Conti con sync attiva": riflette la piattaforma
+      // reale invece del fisso "coretrader" ereditato dal vecchio endpoint CoreTrader.
+      const brokerLabel = (
+        body.source === 'AtasBridge'        ? 'ATAS'
+        : body.source === 'AlphaDeskBridge' ? 'NinjaTrader'
+        : 'coretrader'
+      )
 
       const trade = {
         ninja_id: ninjaId,
@@ -173,7 +180,7 @@ export async function POST(req: NextRequest) {
         savedToAlphadesk = true
         await sb.from('account_syncs').upsert({
           user_id: userId, account,
-          broker: 'coretrader',
+          broker: brokerLabel,
           last_sync: new Date().toISOString(),
           trade_count: 1,
         }, { onConflict: 'user_id,account' })

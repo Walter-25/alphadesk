@@ -8,7 +8,7 @@ interface AliasRow { ntAccount: string; displayName: string }
 export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: { userId: string; mode?: 'nt8'|'watcher'|'atas'; onRecalculated?: () => void }) {
   const [keys, setKeys]             = useState<ApiKey[]>([])
   const [generating, setGenerating] = useState(false)
-  const [label, setLabel]           = useState('NinjaTrader')
+  const [label, setLabel]           = useState('AlphaDesk')
   const [copied, setCopied]         = useState('')
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
   const [aliasesSaved, setAliasesSaved] = useState(false)
@@ -289,7 +289,7 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
 
       {/* Step 1 — API Key (comune a tutte le piattaforme) */}
       <div style={section}>
-        <div style={stepLabel}>Step 1 — API Key (comune a tutte le piattaforme)</div>
+        <div style={stepLabel}>Step 1 — API Key AlphaDesk (comune a tutte le piattaforme)</div>
         {keys.length === 0 ? (
           <>
             <div style={{ fontSize: 12, color: 'var(--text-2)' }}>La chiave autentica l&apos;invio dei trade. Puoi usarne una sola per tutto o generarne una per piattaforma (consigliato: etichette diverse, così puoi revocarle separatamente).</div>
@@ -322,7 +322,7 @@ export default function AlphaDeskBridgeSetup({ userId, mode, onRecalculated }: {
                 <div style={{ fontSize: 10, color: 'var(--text-2)', marginTop: 4 }}>La chiave è mascherata per sicurezza — clicca 📋 Copia per usarla</div>
               </div>
             ))}
-            <button onClick={() => { setLabel('NinjaTrader'); setGenerating(true) }}
+            <button onClick={() => { setLabel('AlphaDesk'); setGenerating(true) }}
               style={{ padding: '5px', borderRadius: 6, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>
               + Aggiungi altra chiave
             </button>

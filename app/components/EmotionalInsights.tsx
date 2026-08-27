@@ -42,7 +42,7 @@ function buildGroup(label: string, trades: Trade[]): Group {
 function GroupLine({ g }: { g: Group }) {
   if (g.count === 0) return null
   if (g.count < MIN_SAMPLE) {
-    return <span>{g.label}: <span style={{ color: 'var(--text-2)' }}>dati insufficienti (n={g.count})</span></span>
+    return <span>{g.label}: <span style={{ color: 'var(--text-1)' }}>dati insufficienti (n={g.count})</span></span>
   }
   const sign = g.avgPnl >= 0 ? '+' : ''
   return (
@@ -57,8 +57,8 @@ function CorrelationCard({ title, groupA, groupB }: { title: string; groupA: Gro
   if (groupA.count === 0 && groupB.count === 0) return null
   return (
     <div style={{ background: 'var(--bg-3)', border: '1px solid var(--border)', borderRadius: 8, padding: '14px 16px' }}>
-      <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.7 }}>
+      <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, fontWeight: 600 }}>{title}</div>
+      <div style={{ fontSize: 14, color: 'var(--text-1)', lineHeight: 1.7 }}>
         <GroupLine g={groupA} /><br /><GroupLine g={groupB} />
       </div>
     </div>
@@ -87,7 +87,7 @@ export default function EmotionalInsights({ userId, tradesHook }: { userId: stri
 
   if (loading || tradesHook.loading) {
     return (
-      <div style={{ fontSize: 12, color: 'var(--text-2)', fontFamily: 'var(--font-mono)' }}>Caricamento pattern...</div>
+      <div style={{ fontSize: 13, color: 'var(--text-1)', fontFamily: 'var(--font-mono)' }}>Caricamento pattern...</div>
     )
   }
 
@@ -128,7 +128,7 @@ export default function EmotionalInsights({ userId, tradesHook }: { userId: stri
       <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 800, fontSize: 16, color: 'var(--text-0)', marginBottom: 4 }}>
         I tuoi pattern (aggiornati sui dati reali)
       </div>
-      <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.5, marginBottom: 16 }}>
+      <div style={{ fontSize: 13, color: 'var(--text-1)', lineHeight: 1.5, marginBottom: 16 }}>
         Non sono consigli: sono osservazioni oggettive calcolate sui tuoi dati. L'interpretazione resta tua.
       </div>
 
@@ -138,7 +138,7 @@ export default function EmotionalInsights({ userId, tradesHook }: { userId: stri
         </div>
       ) : entries.length < TARGET_ENTRIES ? (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: 'var(--text-2)', marginBottom: 8 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-1)', marginBottom: 8 }}>
             Check-in registrati: {entries.length}. Ne servono almeno ~{MIN_ENTRIES} per i primi pattern indicativi, ~{TARGET_ENTRIES} per correlazioni affidabili.
           </div>
           <div style={{ height: 6, borderRadius: 3, background: 'var(--bg-3)', overflow: 'hidden' }}>
@@ -156,7 +156,7 @@ export default function EmotionalInsights({ userId, tradesHook }: { userId: stri
             <CorrelationCard title="Rientro dopo una pausa" groupA={afterGap} groupB={overall} />
           </div>
         ) : (
-          <div style={{ fontSize: 13, color: 'var(--text-2)', fontStyle: 'italic' }}>
+          <div style={{ fontSize: 14, color: 'var(--text-1)', fontStyle: 'italic' }}>
             Le correlazioni compariranno qui man mano che registri check-in e accumuli trade.
           </div>
         )
