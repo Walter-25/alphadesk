@@ -189,23 +189,6 @@ export function useTrades(userId: string) {
     }
   }, [userId])
 
-  // Rinomina account localmente
-  const renameTrades = useCallback((oldName: string, newName: string) => {
-    setTrades(prev => {
-      const updated = prev.map(t => t.account === oldName ? {...t, account: newName} : t)
-      try { localStorage.setItem('ad_trades_' + userId, JSON.stringify(updated)) } catch {}
-      return updated
-    })
-    setPerfReports(prev => {
-      if (!prev[oldName]) return prev
-      const next = {...prev}
-      next[newName] = next[oldName]
-      delete next[oldName]
-      try { localStorage.setItem('ad_perf_' + userId, JSON.stringify(next)) } catch {}
-      return next
-    })
-  }, [userId])
-
   // Elimina tutti i trade di un account
   const deleteTrades = useCallback(async (account: string) => {
     setTrades(prev => {
@@ -349,5 +332,5 @@ export function useTrades(userId: string) {
 
   const accounts = [...new Set([...Object.keys(perfReports), ...trades.map(t => t.account)])]
 
-  return { trades, perfReports, syncs, loading, error, accounts, saveTrades, savePerfReport, updateTrade, renameTrades, deleteTrades, syncBroker, getDashboardStats, reload: loadAll }
+  return { trades, perfReports, syncs, loading, error, accounts, saveTrades, savePerfReport, updateTrade, deleteTrades, syncBroker, getDashboardStats, reload: loadAll }
 }

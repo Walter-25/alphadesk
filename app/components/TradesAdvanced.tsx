@@ -6,6 +6,7 @@ import SyncPanel from './SyncPanel'
 import { parseNinjaTradeList, type Trade } from '../lib/csvParsers'
 import { parseAtasJournal, type AtasIngestPayload } from '../lib/atasJournalParser'
 import { authedFetch } from '../lib/supabase'
+import { useAccountAliases } from '../lib/useAccountAliases'
 
 const ATAS_TIMEZONE = 'Europe/Rome'
 
@@ -831,7 +832,7 @@ function EditableNum({ label, value, onChange, onBlur, readOnly, color }: {
   )
 }
 
-function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void; knownStrategies?: string[] }) {
+function TradeRow({ trade, onUpdate, knownStrategies = [], accountLabel }: { trade: Trade; onUpdate: (id: string, u: Partial<Trade>) => void; knownStrategies?: string[]; accountLabel?: string }) {
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<string[]>(trade.emotion_tags || [])
   const [rule, setRule] = useState<boolean|undefined>(trade.rule_followed)
@@ -895,12 +896,13 @@ function TradeRow({ trade, onUpdate, knownStrategies = [] }: { trade: Trade; onU
   return (
     <>
       <div onClick={() => setOpen(!open)}
-        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 148px 50px 50px 70px 70px 1fr',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:13,alignItems:'center',cursor:'pointer'}}
+        style={{display:'grid',gridTemplateColumns:'22px 75px 95px 70px 60px 148px 50px 50px 70px 70px 1fr',padding:'10px 14px',borderBottom:'1px solid rgba(255,255,255,0.04)',fontSize:13,alignItems:'center',cursor:'pointer'}}
         onMouseEnter={e => (e.currentTarget.style.background='var(--bg-3)')}
         onMouseLeave={e => (e.currentTarget.style.background='transparent')}>
         <div style={{fontSize:10,color:'var(--text-2)'}}>{open?'▼':'▶'}</div>
         <div style={{fontWeight:500,color:'var(--text-0)'}}>{trade.instrument}</div>
         <div style={{fontSize:12,color:'var(--text-2)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{trade.strategy}</div>
+        <div style={{fontSize:11,color:'var(--text-2)',fontFamily:'var(--font-mono)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={accountLabel||trade.account}>{accountLabel||trade.account}</div>
         <div><span style={{display:'inline-block',padding:'2px 6px',borderRadius:4,fontSize:10,fontWeight:600,background:trade.direction==='Long'?'var(--green-dim)':'var(--red-dim)',color:trade.direction==='Long'?'var(--green)':'var(--red)'}}>{trade.direction}</span></div>
         <div style={{fontSize:12,color:'var(--text-1)',fontFamily:'var(--font-mono)',whiteSpace:'nowrap'}}>{trade.entry_time?.substring(0,16)||'—'}</div>
         <div style={{fontSize:12,color:'var(--text-2)'}}>{trade.duration_min}m</div>
@@ -1047,17 +1049,21 @@ function EmotionAnalytics({ trades }: { trades: Trade[] }) {
 
 
 // ─── ACCOUNT ROW ─────────────────────────────────────────────────────────────
-function AccountRow({ account, onRename, onDelete, tradeCount }: {
-  account: string; onRename: (o: string, n: string) => void
+// `account` e' il nome tecnico (identita' immutabile, usata per filtri/ninja_id).
+// `displayName` e' l'alias mostrato (== account se non e' stato impostato nessun
+// alias). "Rinomina" scrive/rimuove solo l'alias: il nome tecnico non cambia mai.
+function AccountRow({ account, displayName, onRename, onDelete, tradeCount }: {
+  account: string; displayName: string; onRename: (o: string, n: string) => void
   onDelete: (a: string) => void; tradeCount: number
 }) {
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(account)
+  const [name, setName] = useState(displayName)
   const [confirmDel, setConfirmDel] = useState(false)
+  const isAliased = displayName !== account
 
   const save = () => {
     const trimmed = name.trim()
-    if (trimmed && trimmed !== account) {
+    if (trimmed && trimmed !== displayName) {
       onRename(account, trimmed)
     }
     setEditing(false)
@@ -1065,7 +1071,7 @@ function AccountRow({ account, onRename, onDelete, tradeCount }: {
 
   const handleKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') save()
-    if (e.key === 'Escape') { setName(account); setEditing(false) }
+    if (e.key === 'Escape') { setName(displayName); setEditing(false) }
   }
 
   return (
@@ -1075,13 +1081,16 @@ function AccountRow({ account, onRename, onDelete, tradeCount }: {
         <input value={name} onChange={e=>setName(e.target.value)} onKeyDown={handleKey}
           autoFocus style={{flex:1,padding:'5px 10px',background:'var(--bg-2)',border:'1px solid var(--accent)',borderRadius:6,color:'var(--text-0)',fontSize:13,fontFamily:'var(--font-mono)',outline:'none'}}/>
       ) : (
-        <div style={{flex:1,fontSize:13,fontFamily:'var(--font-mono)',fontWeight:500,color:'var(--text-0)'}}>{account}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,fontFamily:'var(--font-mono)',fontWeight:500,color:'var(--text-0)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
+          {isAliased && <div style={{fontSize:10,color:'var(--text-2)',marginTop:1}}>conto tecnico: {account}</div>}
+        </div>
       )}
       <div style={{fontSize:11,color:'var(--text-2)'}}>{tradeCount} trade</div>
       {editing ? (
         <div style={{display:'flex',gap:5}}>
           <button onClick={save} style={{padding:'4px 12px',borderRadius:5,border:'1px solid var(--accent)',background:'var(--accent-dim)',color:'var(--accent)',cursor:'pointer',fontSize:11,fontWeight:600}}>✓ Salva</button>
-          <button onClick={()=>{setName(account);setEditing(false)}} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>Annulla</button>
+          <button onClick={()=>{setName(displayName);setEditing(false)}} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>Annulla</button>
         </div>
       ) : confirmDel ? (
         <div style={{display:'flex',gap:5,alignItems:'center'}}>
@@ -1091,7 +1100,7 @@ function AccountRow({ account, onRename, onDelete, tradeCount }: {
         </div>
       ) : (
         <div style={{display:'flex',gap:5}}>
-          <button onClick={()=>setEditing(true)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>✏ Rinomina</button>
+          <button onClick={()=>{setName(displayName);setEditing(true)}} style={{padding:'4px 10px',borderRadius:5,border:'1px solid var(--border)',background:'transparent',color:'var(--text-2)',cursor:'pointer',fontSize:11}}>✏ Rinomina</button>
           <button onClick={()=>setConfirmDel(true)} style={{padding:'4px 10px',borderRadius:5,border:'1px solid rgba(255,77,109,0.3)',background:'var(--red-dim)',color:'var(--red)',cursor:'pointer',fontSize:11}}>🗑 Elimina</button>
         </div>
       )}
@@ -1122,6 +1131,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
   const allPerfStats = tradesHook ? tradesHook.perfReports : perfStats
   const allTrades = tradesHook ? tradesHook.trades : trades
   const accounts = tradesHook ? tradesHook.accounts : [...new Set([...Object.keys(perfStats), ...trades.map(t=>t.account)])]
+  const { displayAccount, setAlias: setAccountAlias, removeAlias: removeAccountAlias } = useAccountAliases(userId)
 
   // Carica dati locali specifici per questo utente all'avvio
   useEffect(() => {
@@ -1355,18 +1365,11 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
             {accounts.map((a: string) => {
               const tc = (tradesHook ? tradesHook.trades : trades).filter((t: Trade) => t.account === a).length
               return (
-                <AccountRow key={a} account={a} tradeCount={tc}
-                  onRename={(oldName: string, newName: string) => {
-                    const src = tradesHook ? tradesHook.trades : trades
-                    const updated = src.map((t: Trade) => t.account === oldName ? {...t, account: newName} : t)
-                    if (!tradesHook) {
-                      setTrades(updated)
-                      lsSave('trades', updated)
-                    } else {
-                      // Aggiorna stato locale del hook
-                      tradesHook.renameTrades && tradesHook.renameTrades(oldName, newName)
-                    }
-                    if (selectedAccounts.includes(oldName)) setSelectedAccounts(prev => prev.map(x => x === oldName ? newName : x))
+                <AccountRow key={a} account={a} displayName={displayAccount(a)} tradeCount={tc}
+                  onRename={(technicalAccount: string, newDisplayName: string) => {
+                    // Alias display-only: aggiorna solo l'etichetta, il nome tecnico
+                    // (colonna account, ninja_id) e la lista selectedAccounts restano invariati.
+                    setAccountAlias(technicalAccount, newDisplayName)
                   }}
                   onDelete={(accountName: string) => {
                     if (!tradesHook) {
@@ -1376,6 +1379,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
                     } else {
                       tradesHook.deleteTrades && tradesHook.deleteTrades(accountName)
                     }
+                    removeAccountAlias(accountName)
                     setSelectedAccounts(prev => prev.filter(x => x !== accountName))
                   }}
                 />
@@ -1399,7 +1403,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
         <div>
           {tab==='sync'&&(
             tradesHook
-              ?<SyncPanel accounts={[]} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId}/>
+              ?<SyncPanel accounts={[]} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId} displayAccount={displayAccount}/>
               :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login.</div>
           )}
         </div>
@@ -1412,7 +1416,7 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
               <button onClick={()=>setSelectedAccounts([])} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${selectedAccounts.length===0?'var(--accent)':'var(--border)'}`,background:selectedAccounts.length===0?'var(--accent-dim)':'transparent',color:selectedAccounts.length===0?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11,fontFamily:'var(--font-mono)'}}>Tutti</button>
               {accounts.map((a:string)=>(
                 <button key={a} onClick={()=>toggleAccount(a)}
-                  style={{padding:'5px 14px',borderRadius:5,border:`1px solid ${selectedAccounts.includes(a)?'var(--accent)':'var(--border)'}`,background:selectedAccounts.includes(a)?'var(--accent-dim)':'transparent',color:selectedAccounts.includes(a)?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:12,fontFamily:'var(--font-mono)',fontWeight:selectedAccounts.includes(a)?600:400}}>{a}</button>
+                  style={{padding:'5px 14px',borderRadius:5,border:`1px solid ${selectedAccounts.includes(a)?'var(--accent)':'var(--border)'}`,background:selectedAccounts.includes(a)?'var(--accent-dim)':'transparent',color:selectedAccounts.includes(a)?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:12,fontFamily:'var(--font-mono)',fontWeight:selectedAccounts.includes(a)?600:400}}>{displayAccount(a)}</button>
               ))}
             </div>
             <div style={{display:'flex',gap:4}}>
@@ -1451,20 +1455,20 @@ export default function TradesAdvanced({ userId, tradesHook }: { userId: string;
           {tab==='calendar'&&<PnLCalendar trades={filteredTrades}/>}
           {tab==='list'&&(
             <div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,overflow:'hidden'}}>
-              <div style={{display:'grid',gridTemplateColumns:'22px 75px 95px 60px 148px 50px 50px 70px 70px 1fr',padding:'8px 14px',borderBottom:'1px solid var(--border)',fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
-                <div></div><div>Strum.</div><div>Strategia</div><div>Dir.</div><div>Data</div><div>Durata</div><div>Qty</div><div>P&L</div><div>Net P&L</div><div>Tag</div>
+              <div style={{display:'grid',gridTemplateColumns:'22px 75px 95px 70px 60px 148px 50px 50px 70px 70px 1fr',padding:'8px 14px',borderBottom:'1px solid var(--border)',fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase',letterSpacing:'0.05em'}}>
+                <div></div><div>Strum.</div><div>Strategia</div><div>Conto</div><div>Dir.</div><div>Data</div><div>Durata</div><div>Qty</div><div>P&L</div><div>Net P&L</div><div>Tag</div>
               </div>
               <div style={{maxHeight:520,overflowY:'auto'}}>
                 {filteredTrades.length===0
                   ?<div style={{padding:24,textAlign:'center',color:'var(--text-2)',fontSize:12}}>Importa la lista trade singoli per il dettaglio</div>
-                  :filteredTrades.map((t:Trade)=><TradeRow key={t.id} trade={t} onUpdate={updateTrade} knownStrategies={strategies}/>)}
+                  :filteredTrades.map((t:Trade)=><TradeRow key={t.id} trade={t} onUpdate={updateTrade} knownStrategies={strategies} accountLabel={displayAccount(t.account)}/>)}
               </div>
             </div>
           )}
           {tab==='emotion'&&<EmotionAnalytics trades={filteredTrades}/>}
           {tab==='sync'&&(
             tradesHook
-              ?<SyncPanel accounts={accounts} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId}/>
+              ?<SyncPanel accounts={accounts} syncs={tradesHook.syncs||[]} onSync={tradesHook.syncBroker} onReload={tradesHook.reload} userId={userId} displayAccount={displayAccount}/>
               :<div style={{background:'var(--bg-2)',border:'1px solid var(--border)',borderRadius:12,padding:24,textAlign:'center',color:'var(--text-2)',fontSize:13}}>La sincronizzazione automatica richiede il login — effettua l'accesso per abilitarla.</div>
           )}
         </>

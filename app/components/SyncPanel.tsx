@@ -9,9 +9,10 @@ interface SyncPanelProps {
   onSync: (account: string, broker: string, config?: any) => Promise<any>
   onReload: () => void
   userId?: string
+  displayAccount?: (account: string) => string
 }
 
-export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }: SyncPanelProps) {
+export default function SyncPanel({ accounts, syncs, onSync, onReload, userId, displayAccount = (a) => a }: SyncPanelProps) {
   const [selectedBroker, setSelectedBroker] = useState('ninjatrader')
   const [selectedAccount, setSelectedAccount] = useState(accounts[0] || '')
   const [syncing, setSyncing] = useState(false)
@@ -151,7 +152,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
               <div style={{ fontSize: 12, color: 'var(--text-1)', marginBottom: 6 }}>Conto da sincronizzare</div>
               {accounts.length > 0 ? (
                 <select value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)} style={{ ...inp }}>
-                  {accounts.map(a => <option key={a} value={a}>{a}</option>)}
+                  {accounts.map(a => <option key={a} value={a}>{displayAccount(a)}</option>)}
                 </select>
               ) : (
                 <input value={selectedAccount} onChange={e => setSelectedAccount(e.target.value)}
@@ -216,7 +217,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
                 <div style={{ fontSize: 11, color: 'var(--text-1)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Ultima sincronizzazione</div>
                 {syncs.map(s => (
                   <div key={s.account} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)', fontWeight: 500 }}>{s.account}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)', fontWeight: 500 }}>{displayAccount(s.account)}</span>
                     <span style={{ color: 'var(--text-1)' }}>{s.broker} · {new Date(s.last_sync).toLocaleDateString('it-IT')}</span>
                   </div>
                 ))}
@@ -232,7 +233,7 @@ export default function SyncPanel({ accounts, syncs, onSync, onReload, userId }:
           <div style={{ fontSize: 11, color: 'var(--text-1)', fontFamily: 'var(--font-mono)', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Conti con sync attiva</div>
           {syncs.map(s => (
             <div key={s.account} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)', fontWeight: 500 }}>{s.account}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-0)', fontWeight: 500 }}>{displayAccount(s.account)}</span>
               <span style={{ color: 'var(--text-1)' }}>{s.broker} · ultima: {new Date(s.last_sync).toLocaleDateString('it-IT')}</span>
             </div>
           ))}
