@@ -10,6 +10,7 @@ import PremarketJournal from './components/PremarketJournal'
 import SyncPanel from './components/SyncPanel'
 import ChangePasswordModal from './components/ChangePasswordModal'
 import { useTrades } from './lib/useTrades'
+import { useAccountAliases } from './lib/useAccountAliases'
 
 // ─── TIPOS ───────────────────────────────────────────────────────────────────
 interface Index { name: string; ticker: string; value: string; chg: string; pct: string; region: 'asia'|'europe'|'us' }
@@ -127,7 +128,7 @@ function SectorBar({ s }: { s: SectorData }) {
 }
 
 // ─── TRADING KPI WIDGET ───────────────────────────────────────────────────────
-function TradingKPI({ tradesHook, setActive }: { tradesHook: any; setActive: (s: string) => void }) {
+function TradingKPI({ tradesHook, setActive, displayAccount = (a: string) => a }: { tradesHook: any; setActive: (s: string) => void; displayAccount?: (a: string) => string }) {
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([])
   const stats = tradesHook.getDashboardStats(selectedAccounts)
 
@@ -158,7 +159,7 @@ function TradingKPI({ tradesHook, setActive }: { tradesHook: any; setActive: (s:
         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {tradesHook.accounts.map((a: string) => (
             <button key={a} onClick={() => toggleAccount(a)}
-              style={{ padding: '4px 10px', borderRadius: 5, border: `1px solid ${selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent)' : 'var(--border)'}`, background: selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent-dim)' : 'transparent', color: selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent)' : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{a}</button>
+              style={{ padding: '4px 10px', borderRadius: 5, border: `1px solid ${selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent)' : 'var(--border)'}`, background: selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent-dim)' : 'transparent', color: selectedAccounts.includes(a) || selectedAccounts.length === 0 ? 'var(--accent)' : 'var(--text-2)', cursor: 'pointer', fontSize: 11, fontFamily: 'var(--font-mono)', fontWeight: 500 }}>{displayAccount(a)}</button>
           ))}
           <button onClick={() => setActive('eseguiti')} style={{ padding: '4px 10px', borderRadius: 5, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11 }}>Dettaglio →</button>
         </div>
@@ -191,7 +192,7 @@ function TradingKPI({ tradesHook, setActive }: { tradesHook: any; setActive: (s:
 }
 
 // ─── PAGINE ──────────────────────────────────────────────────────────────────
-function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?: (s: string) => void }) {
+function PageDashboard({ tradesHook, setActive, displayAccount }: { tradesHook?: any; setActive?: (s: string) => void; displayAccount?: (a: string) => string }) {
   const today = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const sa = setActive || (() => {})
   return (
@@ -207,7 +208,7 @@ function PageDashboard({ tradesHook, setActive }: { tradesHook?: any; setActive?
       </div>
 
       {/* Trading KPI da conti reali */}
-      {tradesHook && <TradingKPI tradesHook={tradesHook} setActive={sa} />}
+      {tradesHook && <TradingKPI tradesHook={tradesHook} setActive={sa} displayAccount={displayAccount} />}
     </div>
   )
 }
@@ -481,13 +482,14 @@ export default function App() {
 
 function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, setActive, onLogout }: any) {
   const tradesHook = useTrades(user.id)
+  const { displayAccount } = useAccountAliases(user.id)
 
   const pages: Record<string, React.ReactNode> = {
-    dashboard: <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
+    dashboard: <PageDashboard tradesHook={tradesHook} setActive={setActive} displayAccount={displayAccount} />,
     eseguiti: <TradesAdvanced userId={user.id} tradesHook={tradesHook} />,
-    operativita: <PageOperativita tradesHook={tradesHook} />,
+    operativita: <PageOperativita tradesHook={tradesHook} displayAccount={displayAccount} />,
     premarket: <PremarketJournal userId={user.id} tradesHook={tradesHook} />,
-    admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} />,
+    admin: isAdmin ? <AdminPanel currentUser={user} /> : <PageDashboard tradesHook={tradesHook} setActive={setActive} displayAccount={displayAccount} />,
   }
 
   return (
@@ -503,7 +505,7 @@ function AppWithTrades({ user, profile, isAdmin, displayName, initials, active, 
 }
 
 // ─── PAGINA OPERATIVITÀ ───────────────────────────────────────────────────────
-function PageOperativita({ tradesHook }: { tradesHook: any }) {
+function PageOperativita({ tradesHook, displayAccount = (a: string) => a }: { tradesHook: any; displayAccount?: (a: string) => string }) {
   const [selectedAccount, setSelectedAccount] = useState<string>('all')
   const [selectedStrategy, setSelectedStrategy] = useState<string>('all')
   const accounts = tradesHook?.accounts || []
@@ -585,7 +587,7 @@ function PageOperativita({ tradesHook }: { tradesHook: any }) {
                 <div key={acc.account} style={{background:'var(--bg-3)',borderRadius:10,padding:'14px 16px',border:`1px solid ${selectedAccount===acc.account?'var(--accent)':'var(--border)'}`,cursor:'pointer'}}
                   onClick={()=>setSelectedAccount(selectedAccount===acc.account?'all':acc.account)}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                    <div style={{fontSize:14,fontWeight:600,color:'var(--text-0)',fontFamily:'var(--font-mono)'}}>{acc.account}</div>
+                    <div style={{fontSize:14,fontWeight:600,color:'var(--text-0)',fontFamily:'var(--font-mono)'}}>{displayAccount(acc.account)}</div>
                     {!acc.hasDetail && <span style={{fontSize:9,padding:'2px 6px',borderRadius:3,background:'var(--amber-dim)',color:'var(--amber)'}}>Solo summary</span>}
                   </div>
                   <div style={{fontSize:22,fontFamily:'var(--font-mono)',fontWeight:800,color:pc(acc.pnl),marginBottom:8}}>{fmtUSD(acc.pnl)}</div>
@@ -603,7 +605,7 @@ function PageOperativita({ tradesHook }: { tradesHook: any }) {
             <div style={{fontSize:10,fontFamily:'var(--font-mono)',color:'var(--text-2)',textTransform:'uppercase'}}>Conto:</div>
             <button onClick={()=>setSelectedAccount('all')} style={{padding:'5px 10px',borderRadius:5,border:`1px solid ${selectedAccount==='all'?'var(--accent)':'var(--border)'}`,background:selectedAccount==='all'?'var(--accent-dim)':'transparent',color:selectedAccount==='all'?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11}}>Tutti</button>
             {accounts.map((a: string) => (
-              <button key={a} onClick={()=>setSelectedAccount(a)} style={{padding:'5px 12px',borderRadius:5,border:`1px solid ${selectedAccount===a?'var(--accent)':'var(--border)'}`,background:selectedAccount===a?'var(--accent-dim)':'transparent',color:selectedAccount===a?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11,fontFamily:'var(--font-mono)'}}>{a}</button>
+              <button key={a} onClick={()=>setSelectedAccount(a)} style={{padding:'5px 12px',borderRadius:5,border:`1px solid ${selectedAccount===a?'var(--accent)':'var(--border)'}`,background:selectedAccount===a?'var(--accent-dim)':'transparent',color:selectedAccount===a?'var(--accent)':'var(--text-1)',cursor:'pointer',fontSize:11,fontFamily:'var(--font-mono)'}}>{displayAccount(a)}</button>
             ))}
             {strategies.length > 2 && <>
               <div style={{width:1,height:16,background:'var(--border)'}}></div>
