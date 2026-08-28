@@ -1,4 +1,12 @@
-// AlphaDesk Bridge v2.0 — NinjaTrader 8 Add-On
+// AlphaDesk Bridge v2.1 — NinjaTrader 8 Add-On
+//
+// v2.1: il campo "account" inviato ad AlphaDesk è ora sempre il nome tecnico
+//       del conto NT8. La rinomina in un'etichetta leggibile si fa in AlphaDesk
+//       (Eseguiti → Sync → Mapping conti), è solo di visualizzazione e non
+//       riscrive i trade. L'alias del config resta letto per retrocompatibilità
+//       e viene inviato come "display_account" (informativo), ma non sostituisce
+//       più il nome del conto nei dati.
+//
 // Installazione:
 //   1. Copia in: Documenti\NinjaTrader 8\bin\Custom\AddOns\
 //   2. In NinjaTrader 8: NinjaScript Editor → F5 per compilare
@@ -31,7 +39,9 @@ namespace NinjaTrader.NinjaScript.AddOns
         private bool   sendSimulated = true;
         private bool   debugMode     = false;
         private int    maxRetries    = 3;
-        // Mappa nome conto NT8 → nome visualizzato in AlphaDesk
+        // Mappa nome conto NT8 → etichetta (retrocompatibilità config v2.0).
+        // Da v2.1 NON sostituisce più il campo "account": viene solo inoltrata
+        // come "display_account" informativo. La rinomina reale è lato AlphaDesk.
         // Esempio: "LFE05067595930005=LucidProp,Sim101=Demo"
         private Dictionary<string,string> accountAlias  = new Dictionary<string,string>();
         // Commissione per contratto per strumento base (usata se broker non invia commissioni)
@@ -94,7 +104,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     try
                     {
                         if (isConfigured) Subscribe();
-                        Log("AlphaDesk Bridge v2.0 pronto. Endpoint: " +
+                        Log("AlphaDesk Bridge v2.1 pronto. Endpoint: " +
                             (apiEndpoint.Length > 0 ? apiEndpoint : "NON CONFIGURATO"));
                     }
                     catch (Exception ex) { Log("Errore avvio: " + ex.Message); }
@@ -104,7 +114,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                 retryTimer = new System.Threading.Timer(RetryFailed, null,
                     TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
 
-                Log("AlphaDesk Bridge v2.0 in caricamento...");
+                Log("AlphaDesk Bridge v2.1 in caricamento...");
             }
             else if (State == State.Terminated)
             {
@@ -464,7 +474,11 @@ namespace NinjaTrader.NinjaScript.AddOns
             sb.Append("{");
             S(sb, "trade_uid",        acc.TradeUid);
             S(sb, "source",           "AlphaDeskBridge");
-            S(sb, "account",          acc.DisplayAccount);
+            // Da v2.1: "account" = nome tecnico del conto (identità stabile, usata
+            // per dedup/filtri). "display_account" è l'etichetta del config, solo
+            // informativa: AlphaDesk la ignora per la colonna account.
+            S(sb, "account",          acc.Account);
+            S(sb, "display_account",  acc.DisplayAccount);
             S(sb, "instrument",       acc.Instrument);
             S(sb, "instrument_base",  acc.InstrumentBase);
             S(sb, "direction",        acc.Direction);
@@ -514,7 +528,7 @@ namespace NinjaTrader.NinjaScript.AddOns
                     req.ContentLength = data.Length;
                     req.Timeout       = 10000;
                     req.Headers.Add("X-API-Key", apiKey);
-                    req.UserAgent = "AlphaDeskBridge/2.0";
+                    req.UserAgent = "AlphaDeskBridge/2.1";
 
                     using (Stream s = req.GetRequestStream())
                         s.Write(data, 0, data.Length);
@@ -756,7 +770,7 @@ namespace NinjaTrader.NinjaScript.AddOns
             }
             Add(root, tbKey);
 
-            Add(root, Lbl("Nome conto in AlphaDesk — separa più conti con la virgola\nEs: LFE05067595930005=LucidProp, Sim101=Demo, ALTRO=NomeScelto"));
+            Add(root, Lbl("Alias conto (facoltativo, retrocompatibilità) — da v2.1 la rinomina si fa in AlphaDesk\ne non riscrive i trade. Lascia vuoto se non ti serve. Es: LFE05067595930005=LucidProp, Sim101=Demo"));
             var aliasList2 = new System.Collections.Generic.List<string>();
             foreach (var kv in bridge.AliasMap) aliasList2.Add(kv.Key + "=" + kv.Value);
             tbAlias = Inp(string.Join(",", aliasList2));

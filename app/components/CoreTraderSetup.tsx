@@ -1,5 +1,7 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useAccountAliases } from '../lib/useAccountAliases'
+import { SavedAliasRow } from './AlphaDeskBridgeSetup'
 
 interface ApiKey { id: string; key: string; label: string; created_at: string }
 interface AliasRow { ntAccount: string; displayName: string }
@@ -9,8 +11,21 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const [generating, setGenerating] = useState(false)
   const [label, setLabel]           = useState('NinjaTrader')
   const [copied, setCopied]         = useState('')
+  // Righe di input per nuovi alias. Gli alias salvati vivono in account_aliases
+  // (Fase 1) via useAccountAliases — stesso sistema della tab Eseguiti.
   const [aliases, setAliases]       = useState<AliasRow[]>([{ ntAccount: '', displayName: '' }])
   const [aliasesSaved, setAliasesSaved] = useState(false)
+  const [aliasSaving, setAliasSaving]   = useState(false)
+
+  const {
+    aliases: aliasMap,
+    loading: aliasLoading,
+    setAlias: persistAlias,
+    removeAlias: deleteAlias,
+    reload: reloadAliases,
+  } = useAccountAliases(userId)
+  const savedAliases: AliasRow[] = Object.entries(aliasMap)
+    .map(([ntAccount, displayName]) => ({ ntAccount, displayName }))
 
   const endpointUrl = typeof window !== 'undefined'
     ? `${window.location.origin}/api/ingest`
@@ -50,28 +65,40 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   const updateAlias = (i: number, field: keyof AliasRow, val: string) =>
     setAliases(a => a.map((row, idx) => idx === i ? { ...row, [field]: val } : row))
 
-  const aliasString = aliases
-    .filter(r => r.ntAccount.trim() && r.displayName.trim())
-    .map(r => `${r.ntAccount.trim()}=${r.displayName.trim()}`)
-    .join(',')
-
-  // Carica mapping salvato da localStorage
-  const [savedAliases, setSavedAliases] = useState<AliasRow[]>([])
+  // Migrazione soft one-shot: alias nel vecchio localStorage -> account_aliases,
+  // solo se la tabella è ancora vuota per l'utente. Poi pulisce la chiave.
+  const aliasMigrated = useRef(false)
   useEffect(() => {
+    if (!userId || aliasLoading || aliasMigrated.current) return
+    aliasMigrated.current = true
+    if (Object.keys(aliasMap).length > 0) return
+    let legacy: AliasRow[] = []
     try {
       const saved = localStorage.getItem('ad_account_aliases_' + userId)
-      if (saved) {
-        const parsed: AliasRow[] = JSON.parse(saved)
-        setSavedAliases(parsed)
-        setAliases(parsed.length > 0 ? parsed : [{ ntAccount: '', displayName: '' }])
-      }
+      if (saved) legacy = JSON.parse(saved)
     } catch {}
-  }, [userId])
+    const valid = (Array.isArray(legacy) ? legacy : [])
+      .filter(r => r?.ntAccount?.trim() && r?.displayName?.trim())
+    if (valid.length === 0) return
+    ;(async () => {
+      for (const r of valid) {
+        try { await persistAlias(r.ntAccount.trim(), r.displayName.trim()) } catch {}
+      }
+      try { localStorage.removeItem('ad_account_aliases_' + userId) } catch {}
+      await reloadAliases()
+    })()
+  }, [userId, aliasLoading, aliasMap, persistAlias, reloadAliases])
 
-  const saveAliases = () => {
+  const saveAliases = async () => {
     const valid = aliases.filter(r => r.ntAccount.trim() && r.displayName.trim())
-    setSavedAliases(valid)
-    try { localStorage.setItem('ad_account_aliases_' + userId, JSON.stringify(valid)) } catch {}
+    if (valid.length === 0) return
+    setAliasSaving(true)
+    for (const r of valid) {
+      try { await persistAlias(r.ntAccount.trim(), r.displayName.trim()) } catch {}
+    }
+    await reloadAliases()
+    setAliasSaving(false)
+    setAliases([{ ntAccount: '', displayName: '' }])
     setAliasesSaved(true)
     setTimeout(() => setAliasesSaved(false), 2000)
   }
@@ -86,8 +113,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
       ApiKey:        apiKey,
       SendSimulated: true,
       Debug:         false,
-      MaxRetries:    3,
-      AccountAlias:  aliasString || ''
+      MaxRetries:    3
     }, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url  = URL.createObjectURL(blob)
@@ -187,11 +213,11 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
         )}
       </div>
 
-      {/* Step 4: Mapping conti */}
+      {/* Step 4: Rinomina conti (alias display-only) */}
       <div style={section}>
-        <div style={stepLabel}>Step 4 — Mapping conti (opzionale)</div>
+        <div style={stepLabel}>Step 4 — Rinomina conti (opzionale)</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          Associa i nomi tecnici dei conti NT8 ai nomi che vuoi vedere in AlphaDesk. Il numero del conto non viene mai mostrato — viene sostituito dal nome scelto.
+          Dai un nome leggibile ai conti NT8: nelle liste e nei grafici di AlphaDesk vedrai l&apos;etichetta al posto del numero. È solo un&apos;etichetta di visualizzazione — <strong>non modifica i trade</strong> e la puoi cambiare o togliere quando vuoi. È lo stesso elenco che trovi in <strong>Eseguiti → conti</strong>.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 32px', gap: 6 }}>
@@ -213,54 +239,22 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
             style={{ padding: '5px 10px', borderRadius: 6, border: '1px dashed var(--border)', background: 'transparent', color: 'var(--text-2)', cursor: 'pointer', fontSize: 11, textAlign: 'left' as const }}>
             + Aggiungi conto
           </button>
-          {aliasString && (
-            <div style={{ background: 'var(--bg-3)', borderRadius: 6, padding: '8px 10px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-1)', wordBreak: 'break-all' as const }}>
-              {aliasString}
-            </div>
-          )}
-          <button onClick={saveAliases}
-            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: aliasesSaved ? 'var(--green-dim)' : 'var(--accent)', color: aliasesSaved ? 'var(--green)' : '#000', fontWeight: 700, cursor: 'pointer', fontSize: 12, width: 'fit-content' }}>
-            {aliasesSaved ? '✓ Mapping salvato' : '💾 Salva mapping'}
+          <button onClick={saveAliases} disabled={aliasSaving}
+            style={{ padding: '7px 16px', borderRadius: 7, border: 'none', background: aliasesSaved ? 'var(--green-dim)' : 'var(--accent)', color: aliasesSaved ? 'var(--green)' : '#000', fontWeight: 700, cursor: aliasSaving ? 'default' : 'pointer', fontSize: 12, width: 'fit-content', opacity: aliasSaving ? 0.6 : 1 }}>
+            {aliasesSaved ? '✓ Etichette salvate' : aliasSaving ? 'Salvataggio…' : '💾 Salva etichette'}
           </button>
           {savedAliases.length > 0 && (
             <div style={{ marginTop: 8 }}>
-              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Mapping attivi</div>
+              <div style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-2)', textTransform: 'uppercase' as const, marginBottom: 6 }}>Etichette attive</div>
               <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
-                {savedAliases.map((r, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr 32px 32px', alignItems: 'center', gap: 6, background: 'var(--bg-3)', borderRadius: 6, padding: '5px 10px' }}>
-                    <input
-                      value={r.ntAccount}
-                      onChange={e => {
-                        const updated = savedAliases.map((x, idx) => idx === i ? { ...x, ntAccount: e.target.value } : x)
-                        setSavedAliases(updated)
-                        setAliases(updated)
-                      }}
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-2)', background: 'transparent', border: 'none', outline: 'none', padding: '2px 4px', borderRadius: 4 }}
-                      onFocus={e => e.target.style.background = 'var(--bg-2)'}
-                      onBlur={e => e.target.style.background = 'transparent'}
-                    />
-                    <span style={{ color: 'var(--accent)', fontSize: 11 }}>→</span>
-                    <input
-                      value={r.displayName}
-                      onChange={e => {
-                        const updated = savedAliases.map((x, idx) => idx === i ? { ...x, displayName: e.target.value } : x)
-                        setSavedAliases(updated)
-                        setAliases(updated)
-                      }}
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-0)', fontWeight: 600, background: 'transparent', border: 'none', outline: 'none', padding: '2px 4px', borderRadius: 4 }}
-                      onFocus={e => e.target.style.background = 'var(--bg-2)'}
-                      onBlur={e => e.target.style.background = 'transparent'}
-                    />
-                    <button onClick={() => saveAliases()} title="Salva modifiche"
-                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid var(--border)', background: 'var(--bg-2)', color: 'var(--accent)', cursor: 'pointer', fontSize: 11 }}>✓</button>
-                    <button onClick={() => {
-                        const updated = savedAliases.filter((_, idx) => idx !== i)
-                        setSavedAliases(updated)
-                        setAliases(updated.length > 0 ? updated : [{ ntAccount: '', displayName: '' }])
-                        try { localStorage.setItem('ad_account_aliases_' + userId, JSON.stringify(updated)) } catch {}
-                      }}
-                      style={{ padding: '3px 6px', borderRadius: 5, border: '1px solid rgba(255,77,109,0.3)', background: 'var(--red-dim)', color: 'var(--red)', cursor: 'pointer', fontSize: 11 }}>✕</button>
-                  </div>
+                {savedAliases.map(r => (
+                  <SavedAliasRow
+                    key={r.ntAccount + '::' + r.displayName}
+                    ntAccount={r.ntAccount}
+                    displayName={r.displayName}
+                    onSave={async (name) => { await persistAlias(r.ntAccount, name); await reloadAliases() }}
+                    onRemove={async () => { await deleteAlias(r.ntAccount); await reloadAliases() }}
+                  />
                 ))}
               </div>
             </div>
@@ -272,7 +266,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
       <div style={section}>
         <div style={stepLabel}>Step 5 — Scarica e installa il config</div>
         <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-          Scarica il file di configurazione già compilato con la tua API key e il mapping conti, e copialo in:
+          Scarica il file di configurazione già compilato con la tua API key e copialo in:
         </div>
         <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--bg-3)', padding: '4px 8px', borderRadius: 4, color: 'var(--text-1)' }}>
           Documenti\NinjaTrader 8\AlphaDeskBridge.config.json
@@ -283,8 +277,7 @@ export default function AlphaDeskBridgeSetup({ userId }: { userId: string }) {
   "ApiKey": "${keys[0] ? maskedKey(keys[0]) : 'genera-prima-la-chiave'}",
   "SendSimulated": true,
   "Debug": false,
-  "MaxRetries": 3,
-  "AccountAlias": "${aliasString || ''}"
+  "MaxRetries": 3
 }`}
         </pre>
         <div style={{ fontSize: 10, color: 'var(--text-2)' }}>ℹ La chiave è mascherata nell&apos;anteprima — nel file scaricato sarà quella reale.</div>
