@@ -104,6 +104,14 @@ export function parseAtasJournal(fileBuf: ArrayBuffer | Buffer, opts: ParseOptio
   const strategy = opts.defaultStrategy?.trim() || 'ATAS';
   const out: AtasIngestPayload[] = [];
 
+  // Due trade identici in ogni campo (stesso account/strumento/secondo apertura-chiusura/
+  // volume) producono la STESSA uid-base e si schiaccerebbero a vicenda nell'upsert.
+  // Regola condivisa col Bridge C# (BuildUid): la 1a occorrenza della base resta invariata,
+  // dalla 2a in poi si appende -d{n}. Quale trade sia la base e quale -d2 e' irrilevante:
+  // essendo identici in ogni campo, conta solo che N trade uguali producano N uid distinti.
+  // Conteggio nell'ordine di iterazione delle righe del foglio Journal.
+  const uidOccurrences = new Map<string, number>();
+
   // Colonne (riga 0 = header): Account, Instrument, Open time, Open price, Open volume,
   // Close time, Close price, Close volume, Price PnL, Profit (ticks), PnL, Comment
   for (let i = 1; i < rows.length; i++) {
@@ -120,7 +128,10 @@ export function parseAtasJournal(fileBuf: ArrayBuffer | Buffer, opts: ParseOptio
     const pnl = Number(r[10]);
 
     // STESSA formula del Bridge C#: {account}-{codiceDatato}-{openSec}-{closeSec}-{volumeConSegno}
-    const tradeUid = `${account}-${datedCode}-${netSeconds(openUtc)}-${netSeconds(closeUtc)}-${openVol}`;
+    const baseUid = `${account}-${datedCode}-${netSeconds(openUtc)}-${netSeconds(closeUtc)}-${openVol}`;
+    const occurrence = (uidOccurrences.get(baseUid) || 0) + 1;
+    uidOccurrences.set(baseUid, occurrence);
+    const tradeUid = occurrence === 1 ? baseUid : `${baseUid}-d${occurrence}`;
 
     out.push({
       source: 'AtasBridge',
